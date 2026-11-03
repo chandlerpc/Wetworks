@@ -1,6 +1,6 @@
 """Command API and ops console. Private: reachable over Tailscale and protected by a token.
 
-All interfaces (phone console, the ops-center UI, clAIr's bridge) talk to this one API.
+All interfaces (phone console, the ops-center UI, C.L.a.i.R's bridge) talk to this one API.
 """
 
 import secrets

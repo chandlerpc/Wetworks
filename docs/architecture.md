@@ -5,10 +5,10 @@ Wetworks is a multi-agent system that runs 24/7 on the MSI (Windows 11 → WSL2 
 ## Hierarchy
 
 ```
-                    Patrick (phone / Discord / voice via clAIr)
+                    Patrick (phone / Discord / voice via C.L.a.i.R)
                                    │
                          ┌─────────┴─────────┐
-                         │      clAIr        │  comms layer (Cloudflare Worker)
+                         │      C.L.a.i.R        │  comms layer (Cloudflare Worker)
                          └─────────┬─────────┘
                                    │
                          ┌─────────┴─────────┐
@@ -24,7 +24,7 @@ Wetworks is a multi-agent system that runs 24/7 on the MSI (Windows 11 → WSL2 
 - **The Architect** plans, delegates, reviews and reports. It never does bulk work itself.
 - **Splinters** are on-demand strike teams for a single mission.
 - **Sleepers** are background agents that wake on schedules or triggers.
-- **clAIr** stays on Cloudflare and handles comms so The Architect stays on task.
+- **C.L.a.i.R** stays on Cloudflare and handles comms so The Architect stays on task.
 
 ## Launch cells
 
@@ -88,13 +88,13 @@ Other vendors (Gemini, Grok, OpenAI) plug in behind the same `LLM` interface lat
 ## Milestone 3: Command API and ops console
 
 - One private API (`wetworks/api.py`, port 8700) that every interface uses: the phone console
-  now, the full ops-center UI and clAIr's bridge later.
+  now, the full ops-center UI and C.L.a.i.R's bridge later.
 - Access: Tailscale only (WSL mirrored networking + a firewall rule limited to port 8700),
   plus a bearer access code. The API refuses everything when no code is configured.
-- Console: night-vision HUD styling. Tri-lens status light per agent (The Architect, clAIr,
+- Console: night-vision HUD styling. Tri-lens status light per agent (The Architect, C.L.a.i.R,
   Intel) glows while that agent is working. Tabs on phone; three panes side by side on desktop.
-- Comms: clAIr and The Architect each have a persona and answer on the local model with live
-  status and recent findings as context. clAIr runs locally here until the bridge to her
+- Comms: C.L.a.i.R and The Architect each have a persona and answer on the local model with live
+  status and recent findings as context. C.L.a.i.R runs locally here until the bridge to her
   Cloudflare Worker is built, at which point this channel is routed to her.
 
 ## Milestone 4: Splinter Operator and missions
@@ -107,18 +107,18 @@ Other vendors (Gemini, Grok, OpenAI) plug in behind the same `LLM` interface lat
   numbered citations and a "Next step:" line. Sources are taken from real search results only.
 - Page reading is limited to public internet addresses (no Docker network, LAN, Tailscale or
   metadata endpoints) and checks every redirect.
-- Chat: clAIr and The Architect reply in JSON and can open a mission when Patrick asks for work.
+- Chat: C.L.a.i.R and The Architect reply in JSON and can open a mission when Patrick asks for work.
 - Console: Missions tab (phone) / under Ops (desktop), new-mission box, live status, detail sheet
   with the write-up, sources and how it was done.
 
-## Milestone 5: clAIr bridge
+## Milestone 5: C.L.a.i.R bridge
 
-- clAIr's Cloudflare Worker (chandlerpc/portfolio, `clair-worker.js`) gained a private
+- C.L.a.i.R's Cloudflare Worker (chandlerpc/portfolio, `clair-worker.js`) gained a private
   `POST /wetworks` route next to her public recruiter mode. It needs the
   `WETWORKS_BRIDGE_TOKEN` secret, uses an assistant persona, and returns `{reply, mission}`.
-- `wetworks/bridge.py`: the console's clAIr channel calls that route with the conversation
+- `wetworks/bridge.py`: the console's C.L.a.i.R channel calls that route with the conversation
   and live status. Gemini 2.5 Flash free tier, so $0. If Cloudflare can't be reached, local
-  clAIr answers and the console says so.
+  C.L.a.i.R answers and the console says so.
 - The Architect's channel always stays local.
 - Her private mode is a self-contained block, so it can be rebuilt (new model, voice, tools)
   without touching the public recruiter.
@@ -126,7 +126,7 @@ Other vendors (Gemini, Grok, OpenAI) plug in behind the same `LLM` interface lat
 ## Next milestones
 
 1. Revenue cell (Sleeper), fed by Intel's money findings.
-3. clAIr bridge: The Architect ↔ Cloudflare Worker.
+3. C.L.a.i.R bridge: The Architect ↔ Cloudflare Worker.
 4. The Forge: local model container with GPU.
 5. Ops-center UI (gritty Splinter Cell style).
 6. Memory: profile seed, Mac notes import, 1-year auto-archive.

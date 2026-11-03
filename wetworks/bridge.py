@@ -1,7 +1,7 @@
-"""Bridge to clAIr's Cloudflare Worker (private /wetworks route).
+"""Bridge to C.L.a.i.R's Cloudflare Worker (private /wetworks route).
 
-Wetworks sends the conversation plus live status; the Worker answers as clAIr on Gemini
-and may open a mission. If the Worker can't be reached, comms falls back to local clAIr.
+Wetworks sends the conversation plus live status; the Worker answers as C.L.a.i.R on Gemini
+and may open a mission. If the Worker can't be reached, comms falls back to local C.L.a.i.R.
 """
 
 import httpx
@@ -37,8 +37,9 @@ class ClairBridge:
             return True, "connected"
         if r.status_code == 401:
             return False, "the Worker rejected the bridge key (WETWORKS_CLAIR_TOKEN or the Cloudflare secret)"
-        if r.status_code in (404, 405):
-            return False, "that URL isn't the /wetworks route, or the updated Worker code isn't deployed yet"
+        if r.status_code in (403, 404, 405):
+            return False, ("the Worker answered like the old public-only version: check that the URL ends in "
+                           "/wetworks and that the updated Worker code is deployed in Cloudflare")
         return False, f"the Worker answered {r.status_code}"
 
     def ask(self, history: list[dict], context: str) -> tuple[str, dict | None]:
@@ -55,16 +56,16 @@ class ClairBridge:
                 timeout=self.timeout,
             )
         except httpx.HTTPError as e:
-            raise BridgeError(f"couldn't reach clAIr's Worker ({type(e).__name__})") from e
+            raise BridgeError(f"couldn't reach C.L.a.i.R's Worker ({type(e).__name__})") from e
         if r.status_code == 401:
-            raise BridgeError("clAIr's Worker rejected the bridge key; check WETWORKS_CLAIR_TOKEN")
+            raise BridgeError("C.L.a.i.R's Worker rejected the bridge key; check WETWORKS_CLAIR_TOKEN")
         if r.status_code != 200:
-            raise BridgeError(f"clAIr's Worker answered {r.status_code}")
+            raise BridgeError(f"C.L.a.i.R's Worker answered {r.status_code}")
         data = r.json()
         reply = str(data.get("reply") or "").strip()
         mission = data.get("mission")
         if not (isinstance(mission, dict) and str(mission.get("request", "")).strip()):
             mission = None
         if not reply:
-            raise BridgeError("clAIr's Worker sent an empty reply")
+            raise BridgeError("C.L.a.i.R's Worker sent an empty reply")
         return reply, mission

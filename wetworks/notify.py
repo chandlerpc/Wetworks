@@ -1,4 +1,4 @@
-"""Outbound notifications. Discord first; phone/clAIr destinations plug in here later."""
+"""Outbound notifications. Discord first; phone/C.L.a.i.R destinations plug in here later."""
 
 import httpx
 

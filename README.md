@@ -22,7 +22,7 @@ docker compose exec ollama ollama pull gemma4:12b
 ## Ops console (phone and desktop)
 
 The Architect serves a private ops console on port 8700: live activity, spend and schedule,
-Intel findings, and two-way comms with clAIr and The Architect. It is only reachable over
+Intel findings, and two-way comms with C.L.a.i.R and The Architect. It is only reachable over
 Tailscale and every API call needs the access code from `WETWORKS_CONSOLE_TOKEN`.
 
 Open `http://msi:8700` on any device signed in to your Tailscale, then use your browser's
@@ -114,7 +114,7 @@ wetworks/
   operators.py  Sleeper Operator (schedules cells)
   cells/        base Cell, Intel (Sleeper), Splinter (missions)
   events.py     activity log + who's working
-  comms.py      chat with clAIr and The Architect (can open missions)
+  comms.py      chat with C.L.a.i.R and The Architect (can open missions)
   missions.py   mission queue
   api.py        Command API + console server
   console/      the ops console (HTML/CSS/JS, no build step)

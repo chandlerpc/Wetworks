@@ -18,7 +18,7 @@
   let findingsCache = [];
   const timers = [];
 
-  const NAMES = { architect: "The Architect", clair: "clAIr", intel: "Intel", splinter: "Splinter", patrick: "You", console: "You" };
+  const NAMES = { architect: "The Architect", clair: "C.L.a.i.R", intel: "Intel", splinter: "Splinter", patrick: "You", console: "You" };
   const STATUS = { queued: "Queued", running: "Running", done: "Done", failed: "Failed", cancelled: "Cancelled" };
   let openMission = null;
   const JOBS = {
@@ -134,9 +134,9 @@
 
   let clairMode = "local";
   const LINK = {
-    cloudflare: "Connected to clAIr on Cloudflare",
-    fallback: "Cloudflare unreachable, so clAIr is answering locally",
-    local: "clAIr is running locally on the MSI",
+    cloudflare: "Connected to C.L.a.i.R on Cloudflare",
+    fallback: "Cloudflare unreachable, so C.L.a.i.R is answering locally",
+    local: "C.L.a.i.R is running locally on the MSI",
   };
   function updateLinkNote() {
     const n = $("#clair-link");
@@ -164,7 +164,7 @@
     const thread = $("#thread");
     if (!messages.length && !thread.children.length) {
       const hint = c === "clair"
-        ? "Ask clAIr what's new, or hand her something to pass along."
+        ? "Ask C.L.a.i.R what's new, or hand her something to pass along."
         : "Ask The Architect for a status read or what to focus on.";
       thread.append(el("p", "empty", hint));
     }
@@ -241,7 +241,7 @@
     const { missions } = await api("/api/missions");
     const list = $("#missions");
     list.replaceChildren();
-    if (!missions.length) { list.append(el("li", "note", "No missions yet. Describe one above, or ask clAIr in Comms.")); return; }
+    if (!missions.length) { list.append(el("li", "note", "No missions yet. Describe one above, or ask C.L.a.i.R in Comms.")); return; }
     missions.forEach((m) => {
       const li = el("li");
       const b = el("button", "mission");

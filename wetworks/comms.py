@@ -1,4 +1,4 @@
-"""Two-way comms with The Architect and clAIr, used by the console (and later clAIr's bridge).
+"""Two-way comms with The Architect and C.L.a.i.R, used by the console (and later C.L.a.i.R's bridge).
 
 Replies are generated in a background thread so the phone never waits on a slow model;
 the console polls for new messages.
@@ -21,7 +21,7 @@ PERSONAS = {
         "make the day job easier, manage finances, free up time, build games, create content."
     ),
     "clair": (
-        "You are clAIr, Patrick's assistant and the comms handler for Wetworks. You keep him "
+        "You are C.L.a.i.R, Patrick's assistant and the comms handler for Wetworks. You keep him "
         "informed and keep The Architect focused by handling requests and updates. Warm, quick "
         "and clear; a few sentences at most unless he asks for more. Use only the status and "
         "findings you're given, quote numbers exactly as written there (spend, budget, counts), "

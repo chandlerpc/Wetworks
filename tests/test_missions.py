@@ -256,7 +256,7 @@ def test_bridge_client_errors(monkeypatch):
     assert not ClairBridge("", "").configured
 
 
-@pytest.mark.parametrize("status,ok,needle", [(400, True, "connected"), (401, False, "rejected"), (404, False, "isn't the /wetworks"),
+@pytest.mark.parametrize("status,ok,needle", [(400, True, "connected"), (401, False, "rejected"), (404, False, "ends in /wetworks"), (403, False, "updated Worker code"),
                                               (500, False, "500")])
 def test_bridge_check(monkeypatch, status, ok, needle):
     from wetworks.bridge import ClairBridge
