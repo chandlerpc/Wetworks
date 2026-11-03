@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     intel_lead_minutes: int = 20  # Intel runs this long before each brief
     intel_tier: str = "work"  # Claude tier for Intel when provider = claude
 
+    # clAIr's Cloudflare Worker (private /wetworks route). Leave blank to run clAIr locally.
+    clair_url: str = ""
+    clair_token: str = ""
+    owner_name: str = "Patrick"
+
     # Command API / ops console. The console refuses to start without a token.
     console_token: str = ""
     console_port: int = 8700

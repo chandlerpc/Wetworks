@@ -177,3 +177,80 @@ def test_mission_api(tmp_path):
 ])
 def test_url_guard(url, ok):
     assert is_public_url(url) is ok
+
+
+class FakeBridge:
+    configured = True
+
+    def __init__(self, reply=None, error=None):
+        self.reply, self.error, self.calls = reply, error, []
+
+    def ask(self, history, context):
+        self.calls.append((history, context))
+        if self.error:
+            raise self.error
+        return self.reply
+
+
+def test_clair_goes_through_bridge_and_can_open_missions(tmp_path):
+    from wetworks.ledger import Ledger
+
+    llm = ScriptedLLM([])  # local model must not be used
+    llm.ledger = Ledger(tmp_path / "l.db")
+    ev = EventLog(tmp_path / "e.db")
+    opened = []
+    bridge = FakeBridge(reply=("Passing it on.", {"title": "Leads", "request": "find leads"}))
+    comms = Comms(tmp_path / "c.db", llm, ev, lambda: "spend $0.43",
+                  open_mission=lambda t, r, s: opened.append((t, r, s)) or {"id": 4, "title": t}, bridge=bridge)
+    comms.post("clair", "find me leads", wait=True)
+    history, context = bridge.calls[0]
+    assert history[-1] == {**history[-1], "sender": "patrick", "text": "find me leads"} and context == "spend $0.43"
+    assert opened == [("Leads", "find leads", "clair")]
+    assert "Mission #4 opened" in comms.messages("clair")[-1]["text"]
+    assert comms.clair_mode == "cloudflare" and llm.prompts == []
+
+
+def test_clair_falls_back_to_local_when_bridge_down(tmp_path):
+    from wetworks.bridge import BridgeError
+    from wetworks.ledger import Ledger
+
+    llm = ScriptedLLM([json.dumps({"reply": "Local clAIr here.", "mission": None})])
+    llm.ledger = Ledger(tmp_path / "l.db")
+    ev = EventLog(tmp_path / "e.db")
+    comms = Comms(tmp_path / "c.db", llm, ev, lambda: "s", open_mission=lambda *a: None,
+                  bridge=FakeBridge(error=BridgeError("couldn't reach")))
+    comms.post("clair", "hi", wait=True)
+    assert comms.messages("clair")[-1]["text"] == "Local clAIr here."
+    assert comms.clair_mode == "fallback"
+    assert any(e["kind"] == "warn" and "answering locally" in e["text"] for e in ev.recent())
+
+
+def test_architect_channel_never_uses_bridge(tmp_path):
+    from wetworks.ledger import Ledger
+
+    llm = ScriptedLLM([json.dumps({"reply": "Architect.", "mission": None})])
+    llm.ledger = Ledger(tmp_path / "l.db")
+    bridge = FakeBridge(reply=("should not be used", None))
+    comms = Comms(tmp_path / "c.db", llm, EventLog(tmp_path / "e.db"), lambda: "s",
+                  open_mission=lambda *a: None, bridge=bridge)
+    comms.post("architect", "status?", wait=True)
+    assert bridge.calls == [] and comms.messages("architect")[-1]["text"] == "Architect."
+
+
+def test_bridge_client_errors(monkeypatch):
+    from wetworks.bridge import BridgeError, ClairBridge
+
+    sent = {}
+
+    def post(url, headers, json, timeout):
+        sent.update(url=url, headers=headers, body=json)
+        return SimpleNamespace(status_code=401, json=lambda: {})
+
+    monkeypatch.setattr("wetworks.bridge.httpx.post", post)
+    b = ClairBridge("https://clair.example.workers.dev/wetworks/", "tok", owner="Patrick")
+    with pytest.raises(BridgeError, match="rejected"):
+        b.ask([{"sender": "patrick", "text": "hi"}, {"sender": "clair", "text": "yo"}], "ctx")
+    assert sent["url"] == "https://clair.example.workers.dev/wetworks"
+    assert sent["headers"]["Authorization"] == "Bearer tok"
+    assert sent["body"]["messages"] == [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "yo"}]
+    assert not ClairBridge("", "").configured

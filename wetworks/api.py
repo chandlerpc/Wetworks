@@ -66,6 +66,7 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
             ],
             "schedule": jobs,
             "intel_topics": len(intel.topics) if intel else 0,
+            "clair": getattr(comms, "clair_mode", "local"),
         })
 
     async def get_events(request: Request):

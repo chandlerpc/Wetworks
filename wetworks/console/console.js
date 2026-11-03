@@ -92,6 +92,9 @@
     });
     if (!s.schedule.length) sched.append(el("li", null, "Nothing scheduled"));
 
+    clairMode = s.clair || "local";
+    updateLinkNote();
+
     // Keep the comms typing hint honest even between message polls
     showTyping(s.busy.includes(channel));
   }
@@ -120,11 +123,25 @@
     if (on) t.textContent = `${NAMES[channel]} is replying`;
   }
 
+  let clairMode = "local";
+  const LINK = {
+    cloudflare: "Connected to clAIr on Cloudflare",
+    fallback: "Cloudflare unreachable, so clAIr is answering locally",
+    local: "clAIr is running locally on the MSI",
+  };
+  function updateLinkNote() {
+    const n = $("#clair-link");
+    n.hidden = channel !== "clair";
+    n.className = `link-note ${clairMode}`;
+    n.textContent = LINK[clairMode] || LINK.local;
+  }
+
   function selectChannel(c) {
     channel = c;
     store.set("wetworks.channel", c);
     $$(".channel").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.channel === c)));
     $("#msg").placeholder = `Message ${NAMES[c]}`;
+    updateLinkNote();
     $("#thread").replaceChildren();
     lastMsg[c] = 0;
     loadMessages();

@@ -13,6 +13,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from .architect import Architect
+from .bridge import ClairBridge
 from .cells.base import CellContext
 from .cells.intel import Intel
 from .cells.splinter import Splinter
@@ -43,8 +44,9 @@ def build(settings):
         operator.submit()
         return m
 
+    bridge = ClairBridge(settings.clair_url, settings.clair_token, owner=settings.owner_name)
     comms = Comms(settings.data_dir / "comms.db", architect.llm, architect.events, architect.context_block,
-                  open_mission=open_mission)
+                  open_mission=open_mission, bridge=bridge)
     operator.on_done = comms.mission_report
     comms.missions, comms.operator, comms.open_mission_fn = missions, operator, open_mission
     return architect, {"intel": intel}, comms

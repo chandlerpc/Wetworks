@@ -111,6 +111,18 @@ Other vendors (Gemini, Grok, OpenAI) plug in behind the same `LLM` interface lat
 - Console: Missions tab (phone) / under Ops (desktop), new-mission box, live status, detail sheet
   with the write-up, sources and how it was done.
 
+## Milestone 5: clAIr bridge
+
+- clAIr's Cloudflare Worker (chandlerpc/portfolio, `clair-worker.js`) gained a private
+  `POST /wetworks` route next to her public recruiter mode. It needs the
+  `WETWORKS_BRIDGE_TOKEN` secret, uses an assistant persona, and returns `{reply, mission}`.
+- `wetworks/bridge.py`: the console's clAIr channel calls that route with the conversation
+  and live status. Gemini 2.5 Flash free tier, so $0. If Cloudflare can't be reached, local
+  clAIr answers and the console says so.
+- The Architect's channel always stays local.
+- Her private mode is a self-contained block, so it can be rebuilt (new model, voice, tools)
+  without touching the public recruiter.
+
 ## Next milestones
 
 1. Revenue cell (Sleeper), fed by Intel's money findings.

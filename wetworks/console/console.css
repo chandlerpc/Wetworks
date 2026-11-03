@@ -150,6 +150,11 @@ input:focus, textarea:focus { border-color: var(--phosphor-dim); outline: none; 
 .channel[aria-selected="true"] { background: var(--hull); color: var(--paper); border-color: var(--seam); }
 .channel:hover { filter: none; color: var(--paper); }
 
+.link-note { margin: var(--s2) 0 0; font-size: 13px; color: var(--fog); display: flex; align-items: center; gap: 6px; }
+.link-note::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--phosphor-dim); }
+.link-note.cloudflare::before { background: var(--phosphor); box-shadow: 0 0 6px var(--phosphor); }
+.link-note.fallback { color: var(--amber); }
+.link-note.fallback::before { background: var(--amber); }
 .thread { flex: 1; overflow-y: auto; padding: var(--s4) 0; display: flex; flex-direction: column; gap: var(--s3); max-height: 58vh; }
 .msg { max-width: 86%; padding: var(--s2) var(--s3); border-radius: 10px; font-size: 15.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .msg.them { align-self: flex-start; background: var(--hull); border: 1px solid var(--seam); border-bottom-left-radius: 2px; }

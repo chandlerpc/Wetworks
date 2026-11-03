@@ -64,12 +64,14 @@ def parse_reply(text: str) -> tuple[str, dict | None]:
 
 
 class Comms:
-    def __init__(self, path: Path, llm, events, context_fn, open_mission=None):
+    def __init__(self, path: Path, llm, events, context_fn, open_mission=None, bridge=None):
         """context_fn() returns a text block of current status and findings for the model.
 
         open_mission(title, request, source) queues a mission and returns it (dict with "id").
         """
         self.open_mission = open_mission
+        self.bridge = bridge if bridge is not None and bridge.configured else None
+        self.clair_mode = "cloudflare" if self.bridge else "local"  # cloudflare | local | fallback
         path.parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(path, check_same_thread=False)
         self.lock = threading.Lock()
@@ -132,12 +134,28 @@ class Comms:
             )
             json_mode = self.open_mission is not None
             try:
-                if self.llm.s.provider == "local":
-                    reply = self.llm.ask_local(f"comms:{channel}", prompt, system=PERSONAS[channel],
-                                               json_mode=json_mode, max_tokens=700)
+                bridged = None
+                if channel == "clair" and self.bridge:
+                    try:
+                        bridged = self.bridge.ask(history, self.context_fn())
+                        self.llm.ledger.record_cost("comms:clair", "gemini:clair-worker", 0, 0, 0.0)
+                        if self.clair_mode != "cloudflare":
+                            self.events.add("clair", "info", "Back on Cloudflare")
+                        self.clair_mode = "cloudflare"
+                    except Exception as e:
+                        if self.clair_mode != "fallback":
+                            self.events.add("clair", "warn", f"Cloudflare unreachable, answering locally: {e}")
+                        self.clair_mode = "fallback"
+                if bridged is not None:
+                    text, mission = bridged
                 else:
-                    reply = self.llm.ask(f"comms:{channel}", prompt, tier="work", system=PERSONAS[channel], max_tokens=700)
-                text, mission = parse_reply(reply.text) if json_mode else (reply.text.strip(), None)
+                    if self.llm.s.provider == "local":
+                        reply = self.llm.ask_local(f"comms:{channel}", prompt, system=PERSONAS[channel],
+                                                   json_mode=json_mode, max_tokens=700)
+                    else:
+                        reply = self.llm.ask(f"comms:{channel}", prompt, tier="work", system=PERSONAS[channel],
+                                             max_tokens=700)
+                    text, mission = parse_reply(reply.text) if json_mode else (reply.text.strip(), None)
                 if mission and self.open_mission:
                     m = self.open_mission(str(mission.get("title", "")), str(mission["request"]), channel)
                     text = (text or "On it.") + f"\n\nMission #{m['id']} opened: {m['title']}. Track it in Missions."
