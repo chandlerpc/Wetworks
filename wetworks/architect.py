@@ -71,7 +71,14 @@ class Architect:
         ).fetchall()
         recent = "\n".join(f"- [{t}] (imp {i}) {ti}: {s}" for t, ti, s, i in rows) or "(none yet)"
         busy = ", ".join(sorted(self.events.busy)) or "nobody"
-        return f"{self.status_block()}\nWorking right now: {busy}\nLatest Intel findings:\n{recent}"
+        mtd, budget = self.ledger.month_to_date(), self.s.monthly_budget_usd
+        mode = "free local model" if self.s.provider == "local" else f"paid {self.s.provider}"
+        facts = (
+            f"Money spent on paid AI this month: ${mtd:.2f} out of a ${budget:.2f} budget.\n"
+            f"Wetworks is currently running on: {mode} (new work costs $0 while on the free model; "
+            f"the ${mtd:.2f} was spent earlier)."
+        )
+        return f"{facts}\n{self.status_block()}\nWorking right now: {busy}\nLatest Intel findings:\n{recent}"
 
     def brief(self, kind: str) -> str:
         """kind = morning | evening. Builds the brief, sends it, and marks findings reported."""

@@ -141,3 +141,10 @@ def test_ollama_falls_back_when_think_unsupported(monkeypatch):
     monkeypatch.setattr("wetworks.local.httpx.post", post)
     assert Ollama("http://x", "m").chat("hi")[0] == "ok"
     assert seen == [True, False]
+
+
+def test_context_states_spend_plainly(tmp_path):
+    _, architect, _ = make(tmp_path)
+    architect.ledger.record("intel:AI", "claude-sonnet-5-5", 100_000, 23_000)  # $0.43
+    ctx = architect.context_block()
+    assert "Money spent on paid AI this month: $0.43 out of a $250.00 budget." in ctx
