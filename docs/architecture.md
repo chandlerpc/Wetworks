@@ -83,7 +83,7 @@ Other vendors (Gemini, Grok, OpenAI) plug in behind the same `LLM` interface lat
   from real search results, never from the model.
 - `claude` and `grok` providers stay available for short paid tests.
 - Build-phase budget cap: $5/month in `.env.example`. Raise it once everything is proven.
-- Ollama unloads the model 10 minutes after use so the GPU is free for Black Desert.
+- Ollama keeps the model loaded in GPU memory permanently (the GPU is dedicated to Wetworks), so runs skip the cold start.
 
 ## Next milestones
 

@@ -26,7 +26,7 @@ services:
     volumes:
       - ollama-models:/root/.ollama
     environment:
-      OLLAMA_KEEP_ALIVE: 10m   # free GPU memory 10 min after use, so BDO gets it back
+      OLLAMA_KEEP_ALIVE: "-1"  # keep the model loaded in GPU memory; no cold start on each run
     deploy:
       resources:
         reservations:
