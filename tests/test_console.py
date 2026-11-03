@@ -99,3 +99,45 @@ def test_cell_logs_to_activity_feed(tmp_path):
     Intel(ctx).safe_run()
     kinds = [e["kind"] for e in architect.events.recent()]
     assert kinds[-2:] == ["start", "done"] and "intel" not in architect.events.busy
+
+
+def test_ollama_disables_thinking_and_retries_empty(monkeypatch):
+    from types import SimpleNamespace
+
+    from wetworks.local import Ollama
+
+    bodies = []
+    replies = iter([
+        {"message": {"content": "", "thinking": "hmm..."}, "prompt_eval_count": 10, "eval_count": 600},
+        {"message": {"content": "Standing by."}, "prompt_eval_count": 10, "eval_count": 5},
+    ])
+
+    def post(url, json, timeout):
+        bodies.append({**json, "options": dict(json["options"])})
+        return SimpleNamespace(status_code=200, text="", raise_for_status=lambda: None, json=lambda: next(replies))
+
+    monkeypatch.setattr("wetworks.local.httpx.post", post)
+    text, tin, tout = Ollama("http://x", "m").chat("hi", max_tokens=600)
+    assert text == "Standing by." and (tin, tout) == (20, 605)
+    assert bodies[0]["think"] is False
+    assert bodies[1]["options"]["num_predict"] == 1200  # retried with more room
+
+
+def test_ollama_falls_back_when_think_unsupported(monkeypatch):
+    from types import SimpleNamespace
+
+    from wetworks.local import Ollama
+
+    seen = []
+
+    def post(url, json, timeout):
+        seen.append("think" in json)
+        if "think" in json:
+            return SimpleNamespace(status_code=400, text='{"error":"model does not support thinking"}',
+                                   raise_for_status=lambda: None, json=lambda: {})
+        return SimpleNamespace(status_code=200, text="", raise_for_status=lambda: None,
+                               json=lambda: {"message": {"content": "ok"}})
+
+    monkeypatch.setattr("wetworks.local.httpx.post", post)
+    assert Ollama("http://x", "m").chat("hi")[0] == "ok"
+    assert seen == [True, False]

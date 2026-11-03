@@ -97,7 +97,7 @@ class Comms:
                     reply = self.llm.ask_local(f"comms:{channel}", prompt, system=PERSONAS[channel], max_tokens=600)
                 else:
                     reply = self.llm.ask(f"comms:{channel}", prompt, tier="work", system=PERSONAS[channel], max_tokens=600)
-                text = reply.text.strip() or "(no reply)"
+                text = reply.text.strip() or "I came back empty on that one. Try asking again, or rephrase it."
             except Exception as e:
                 text = f"Comms down: {type(e).__name__}. The local model may still be loading; try again in a minute."
                 self.events.add(channel, "error", f"Reply failed: {e}")

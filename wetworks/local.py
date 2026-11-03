@@ -26,10 +26,27 @@ class Ollama:
         }
         if json_mode:
             body["format"] = "json"
-        r = httpx.post(f"{self.base}/api/chat", json=body, timeout=self.timeout)
-        r.raise_for_status()
-        data = r.json()
-        return data["message"]["content"], int(data.get("prompt_eval_count", 0)), int(data.get("eval_count", 0))
+        # Thinking models can spend the whole token budget reasoning privately and return an
+        # empty answer. Wetworks wants direct answers, so thinking is switched off.
+        body["think"] = False
+
+        tin = tout = 0
+        for attempt in range(2):
+            r = httpx.post(f"{self.base}/api/chat", json=body, timeout=self.timeout)
+            if r.status_code == 400 and "think" in r.text.lower() and "think" in body:
+                body.pop("think")  # model doesn't support the switch; ask normally
+                r = httpx.post(f"{self.base}/api/chat", json=body, timeout=self.timeout)
+            r.raise_for_status()
+            data = r.json()
+            tin += int(data.get("prompt_eval_count", 0))
+            tout += int(data.get("eval_count", 0))
+            text = (data.get("message", {}).get("content") or "").strip()
+            if text:
+                return text, tin, tout
+            # Empty answer: give it more room once before giving up.
+            log.warning("Ollama returned an empty answer (attempt %d); retrying with more room", attempt + 1)
+            body["options"]["num_predict"] = max_tokens * 2
+        return "", tin, tout
 
 
 class SearXNG:
