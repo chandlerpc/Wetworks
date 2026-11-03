@@ -18,7 +18,9 @@
   let findingsCache = [];
   const timers = [];
 
-  const NAMES = { architect: "The Architect", clair: "clAIr", intel: "Intel", patrick: "You" };
+  const NAMES = { architect: "The Architect", clair: "clAIr", intel: "Intel", splinter: "Splinter", patrick: "You", console: "You" };
+  const STATUS = { queued: "Queued", running: "Running", done: "Done", failed: "Failed", cancelled: "Cancelled" };
+  let openMission = null;
   const JOBS = {
     morning_brief: "Morning brief",
     evening_brief: "Evening brief",
@@ -71,10 +73,11 @@
     const h = s.host;
     $("#ro-host").textContent = `CPU ${h.cpu_percent}%\nRAM ${h.mem_used_gb} of ${h.mem_total_gb} GB\nDisk ${h.disk_free_gb} GB free\nUp ${h.uptime_hours} h`;
 
+    // Splinter teams work under The Architect, so they light his lens
+    const busy = (a) => s.busy.includes(a) || (a === "architect" && s.busy.includes("splinter"));
     $$(".topbar .lens").forEach((l) => {
-      const a = l.dataset.agent;
-      l.classList.toggle("busy", s.busy.includes(a));
-      l.classList.toggle("on", !s.busy.includes(a));
+      l.classList.toggle("busy", busy(l.dataset.agent));
+      l.classList.toggle("on", !busy(l.dataset.agent));
     });
     const working = s.busy.map((b) => NAMES[b] || b);
     $("#statusline").textContent = working.length ? `${working.join(" and ")} working` : `All quiet · ${s.intel_topics} Intel topics watched`;
@@ -205,6 +208,104 @@
     });
   }
 
+  // ---- Missions -------------------------------------------------------
+  async function loadMissions() {
+    const { missions } = await api("/api/missions");
+    const list = $("#missions");
+    list.replaceChildren();
+    if (!missions.length) { list.append(el("li", "note", "No missions yet. Describe one above, or ask clAIr in Comms.")); return; }
+    missions.forEach((m) => {
+      const li = el("li");
+      const b = el("button", "mission");
+      b.type = "button";
+      b.append(el("span", `status-line ${m.status}`, `#${m.id} · ${STATUS[m.status] || m.status}${m.source && m.source !== "console" ? ` · via ${NAMES[m.source] || m.source}` : ""}`));
+      b.append(el("span", "m-title", m.title), el("span", "m-when", ago(m.updated)));
+      if (m.result_preview && m.status === "done") {
+        const plain = m.result_preview.replace(/^#+\s*/gm, "").replace(/^[-*•]\s+/gm, "").replace(/\*\*/g, "").replace(/\s*\[\d+\]/g, "").replace(/\s+/g, " ").trim();
+        b.append(el("span", "m-preview", plain));
+      }
+      b.addEventListener("click", () => showMission(m.id));
+      li.append(b);
+      list.append(li);
+    });
+    if (openMission) refreshSheet();
+  }
+
+  // Minimal, safe renderer for write-ups: headings, bullets, paragraphs, [n] citations, Next step.
+  function renderResult(text, sources) {
+    const box = $("#ms-result");
+    box.replaceChildren();
+    const byN = Object.fromEntries((sources || []).map((s) => [String(s.n), s]));
+    const inline = (parent, str) => {
+      str.split(/(\[\d+\])/g).forEach((part) => {
+        const m = part.match(/^\[(\d+)\]$/);
+        if (m && byN[m[1]]) {
+          const sup = el("sup"); const a = el("a", null, `[${m[1]}]`);
+          a.href = byN[m[1]].url; a.target = "_blank"; a.rel = "noopener noreferrer"; a.title = byN[m[1]].title;
+          sup.append(a); parent.append(sup);
+        } else if (part) parent.append(document.createTextNode(part.replace(/\*\*(.+?)\*\*/g, "$1")));
+      });
+    };
+    let ul = null;
+    text.split("\n").forEach((raw) => {
+      const line = raw.trim();
+      if (!line) { ul = null; return; }
+      if (/^#{1,4}\s/.test(line)) { ul = null; const h = el("h4"); inline(h, line.replace(/^#+\s*/, "")); box.append(h); return; }
+      if (/^[-*•]\s+/.test(line)) { if (!ul) { ul = el("ul"); box.append(ul); } const li = el("li"); inline(li, line.replace(/^[-*•]\s+/, "")); ul.append(li); return; }
+      ul = null;
+      const p = el("p", /^next step:/i.test(line) ? "next" : null);
+      inline(p, line);
+      box.append(p);
+    });
+  }
+
+  async function refreshSheet() {
+    if (!openMission) return;
+    const m = await api(`/api/missions/${openMission}`);
+    const st = $("#ms-status");
+    st.className = `status-line ${m.status}`;
+    st.textContent = `Mission #${m.id} · ${STATUS[m.status] || m.status}`;
+    $("#ms-title").textContent = m.title;
+    $("#ms-request").textContent = m.request;
+    if (m.status === "done" || m.status === "failed") renderResult(m.result || "", m.sources);
+    else $("#ms-result").replaceChildren(el("p", "pending", m.status === "running" ? "A Splinter team is on it. This page updates as it works." : m.status === "queued" ? "Waiting for the current mission to finish." : "This mission was cancelled."));
+    const src = $("#ms-sources");
+    src.replaceChildren();
+    (m.status === "done" ? m.sources : []).forEach((s) => {
+      const li = el("li"); const a = el("a", null, s.title || s.url);
+      a.href = s.url; a.target = "_blank"; a.rel = "noopener noreferrer";
+      li.append(a); src.append(li);
+    });
+    const steps = $("#ms-steps");
+    steps.replaceChildren(...m.steps.map((x) => el("li", null, `${clock(x.ts)}  ${x.text}`)));
+    $(".steps-wrap").hidden = !m.steps.length;
+    $("#ms-cancel").hidden = !(m.status === "queued" || m.status === "running");
+  }
+
+  async function showMission(id) {
+    openMission = id;
+    await refreshSheet();
+    const d = $("#mission-sheet");
+    if (!d.open) d.showModal();
+  }
+
+  async function startMission(e) {
+    e.preventDefault();
+    const box = $("#mission-text");
+    const request = box.value.trim();
+    if (!request) { box.focus(); return; }
+    const btn = $("#new-mission button");
+    btn.disabled = true;
+    try {
+      const m = await api("/api/missions", { method: "POST", body: JSON.stringify({ request }) });
+      box.value = "";
+      await loadMissions();
+      showMission(m.id);
+    } catch (err) {
+      if (err.message !== "unauthorized") alert(err.message);
+    } finally { btn.disabled = false; }
+  }
+
   // ---- Actions --------------------------------------------------------
   async function runAction(btn) {
     const note = $("#action-note");
@@ -239,9 +340,9 @@
     $("#logout").hidden = false;
     showPane(store.get("wetworks.pane") || "ops");
     selectChannel(channel);
-    const s = safe(loadStatus), ev = safe(loadEvents), m = safe(loadMessages), f = safe(loadFindings);
-    s(); ev(); f();
-    timers.push(setInterval(s, 8000), setInterval(ev, 4000), setInterval(m, 2500), setInterval(f, 30000));
+    const s = safe(loadStatus), ev = safe(loadEvents), m = safe(loadMessages), f = safe(loadFindings), mi = safe(loadMissions);
+    s(); ev(); f(); mi();
+    timers.push(setInterval(s, 8000), setInterval(ev, 4000), setInterval(m, 2500), setInterval(f, 30000), setInterval(mi, 5000));
   }
 
   function lock(message = "") {
@@ -277,6 +378,15 @@
   $$(".channel").forEach((b) => b.addEventListener("click", () => selectChannel(b.dataset.channel)));
   $$(".tabs button").forEach((b) => b.addEventListener("click", () => showPane(b.dataset.pane)));
   $$("[data-action]").forEach((b) => b.addEventListener("click", () => runAction(b)));
+  $("#new-mission").addEventListener("submit", startMission);
+  $("#ms-close").addEventListener("click", () => $("#mission-sheet").close());
+  $("#mission-sheet").addEventListener("close", () => { openMission = null; });
+  $("#mission-sheet").addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+  $("#ms-cancel").addEventListener("click", async () => {
+    if (!openMission) return;
+    try { await api(`/api/missions/${openMission}/cancel`, { method: "POST" }); await refreshSheet(); loadMissions(); }
+    catch (err) { if (err.message !== "unauthorized") alert(err.message); }
+  });
 
   if (token) api("/api/status").then(start).catch(() => {}); else lock();
 })();

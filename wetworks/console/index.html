@@ -75,6 +75,18 @@
       </div>
     </section>
 
+    <!-- Missions: on-demand work run by Splinter teams -->
+    <section id="pane-missions" class="pane" aria-labelledby="missions-h">
+      <h2 id="missions-h">Missions</h2>
+      <form id="new-mission" class="new-mission" autocomplete="off">
+        <label for="mission-text" class="sr-only">What should the Splinter team do?</label>
+        <textarea id="mission-text" rows="3" placeholder="What should a Splinter team do? For example: find three Orlando clinics that might pay for AI intake automation"></textarea>
+        <button type="submit">Start mission</button>
+      </form>
+      <p class="note">You can also ask clAIr or The Architect in Comms; they'll open a mission for you.</p>
+      <ul id="missions" class="missions"></ul>
+    </section>
+
     <!-- Comms: talk to clAIr and The Architect -->
     <section id="pane-comms" class="pane" aria-labelledby="comms-h">
       <h2 id="comms-h">Comms</h2>
@@ -101,9 +113,33 @@
 
   <nav id="tabs" class="tabs" hidden aria-label="Sections">
     <button type="button" data-pane="ops" aria-current="page">Ops</button>
+    <button type="button" data-pane="missions">Missions</button>
     <button type="button" data-pane="comms">Comms</button>
     <button type="button" data-pane="intel">Intel</button>
   </nav>
+
+  <!-- Mission detail -->
+  <dialog id="mission-sheet" class="sheet" aria-labelledby="ms-title">
+    <div class="sheet-head">
+      <div>
+        <p id="ms-status" class="status-line"></p>
+        <h3 id="ms-title"></h3>
+      </div>
+      <button type="button" class="ghost small" id="ms-close">Close</button>
+    </div>
+    <div class="sheet-body">
+      <p id="ms-request" class="request"></p>
+      <div id="ms-result" class="result"></div>
+      <ol id="ms-sources" class="sources"></ol>
+      <details class="steps-wrap">
+        <summary>How it was done</summary>
+        <ol id="ms-steps" class="steps mono"></ol>
+      </details>
+    </div>
+    <div class="sheet-foot">
+      <button type="button" class="ghost" id="ms-cancel" hidden>Cancel mission</button>
+    </div>
+  </dialog>
 
   <!-- Access code -->
   <div id="gate" class="gate">

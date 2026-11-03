@@ -79,3 +79,86 @@ def candidates_block(results: list[dict]) -> str:
 
 def dumps(obj) -> str:
     return json.dumps(obj, ensure_ascii=False)
+
+
+class _TextExtractor:
+    """Pulls readable text out of HTML with the standard library (no extra dependencies)."""
+
+    SKIP = {"script", "style", "noscript", "svg", "nav", "footer", "header", "form", "aside"}
+
+    def __init__(self):
+        from html.parser import HTMLParser
+
+        outer = self
+
+        class P(HTMLParser):
+            def __init__(self):
+                super().__init__(convert_charrefs=True)
+                self.depth = 0
+                self.parts: list[str] = []
+
+            def handle_starttag(self, tag, attrs):
+                if tag in outer.SKIP:
+                    self.depth += 1
+
+            def handle_endtag(self, tag):
+                if tag in outer.SKIP and self.depth:
+                    self.depth -= 1
+
+            def handle_data(self, data):
+                if not self.depth and data.strip():
+                    self.parts.append(data.strip())
+
+        self.parser = P()
+
+    def text(self, html: str) -> str:
+        self.parser.feed(html)
+        return " ".join(self.parser.parts)
+
+
+def is_public_url(url: str) -> bool:
+    """True only for http(s) URLs whose host resolves to public internet addresses.
+
+    Stops research from reaching the Docker network (Ollama, SearXNG), the home LAN,
+    Tailscale devices or cloud metadata endpoints.
+    """
+    import ipaddress
+    import socket
+    from urllib.parse import urlsplit
+
+    try:
+        parts = urlsplit(url)
+        if parts.scheme not in ("http", "https") or not parts.hostname:
+            return False
+        infos = socket.getaddrinfo(parts.hostname, parts.port or (443 if parts.scheme == "https" else 80))
+    except (ValueError, OSError):
+        return False
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0].split("%")[0])
+        if not ip.is_global or ip in ipaddress.ip_network("100.64.0.0/10"):
+            return False
+    return True
+
+
+def fetch_text(url: str, max_chars: int = 3000, timeout: float = 15) -> str:
+    """Download a public page and return its readable text, or '' if it can't be read."""
+    if not is_public_url(url):
+        return ""
+    try:
+        # Redirects are not followed blindly: a public page could redirect to a private address.
+        r = httpx.get(url, timeout=timeout, follow_redirects=False,
+                      headers={"User-Agent": "Mozilla/5.0 (compatible; WetworksBot/0.1)"})
+        hops = 0
+        while r.status_code in (301, 302, 303, 307, 308) and hops < 3:
+            nxt = str(r.next_request.url) if r.next_request else ""
+            if not is_public_url(nxt):
+                return ""
+            r = httpx.get(nxt, timeout=timeout, follow_redirects=False,
+                          headers={"User-Agent": "Mozilla/5.0 (compatible; WetworksBot/0.1)"})
+            hops += 1
+        if r.status_code != 200 or "html" not in r.headers.get("content-type", ""):
+            return ""
+        return _TextExtractor().text(r.text[:400_000])[:max_chars]
+    except Exception as e:  # network trouble is normal; the Splinter carries on with snippets
+        log.info("Couldn't read %s: %s", url, e)
+        return ""

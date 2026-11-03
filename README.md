@@ -37,6 +37,15 @@ All interfaces use the same Command API:
 | `GET /api/findings` | latest Intel findings |
 | `GET/POST /api/comms/{clair,architect}` | read / send messages |
 | `POST /api/actions/{intel,brief-morning,brief-evening}` | run something now |
+| `GET/POST /api/missions` | list / start missions |
+| `GET /api/missions/{id}` | one mission: steps, write-up, sources |
+| `POST /api/missions/{id}/cancel` | cancel a queued or running mission |
+
+Run a mission from the terminal:
+
+```
+docker compose exec architect python -m wetworks.main mission "Find three Orlando clinics that might pay for AI intake automation"
+```
 
 ## Intel topics
 
@@ -103,9 +112,10 @@ wetworks/
   architect.py  The Architect: briefs
   findings.py   shared findings store
   operators.py  Sleeper Operator (schedules cells)
-  cells/        base Cell + Intel
+  cells/        base Cell, Intel (Sleeper), Splinter (missions)
   events.py     activity log + who's working
-  comms.py      chat with clAIr and The Architect
+  comms.py      chat with clAIr and The Architect (can open missions)
+  missions.py   mission queue
   api.py        Command API + console server
   console/      the ops console (HTML/CSS/JS, no build step)
 config/

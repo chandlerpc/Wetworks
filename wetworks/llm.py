@@ -7,7 +7,7 @@ import httpx
 
 from .config import Settings
 from .ledger import SEARCH_PRICE, Ledger
-from .local import Ollama, SearXNG
+from .local import Ollama, SearXNG, fetch_text
 
 log = logging.getLogger("wetworks.llm")
 
@@ -71,7 +71,12 @@ class LLM:
         """Ask the local Ollama model. Free; logged at $0 so usage still shows in the ledger."""
         model = f"local:{self.s.local_model}"
         if self.s.dry_run:
-            return Reply(text="[]" if json_mode else f"[dry-run {model}] {prompt[:200]}", model=model, cost_usd=0.0)
+            stub = f"[dry-run {model}] {prompt[:200]}"
+            if json_mode:  # one shape every JSON caller understands: no findings, no mission
+                import json as _json
+
+                stub = _json.dumps({"reply": stub, "findings": [], "mission": None})
+            return Reply(text=stub, model=model, cost_usd=0.0)
         text, tin, tout = self.ollama.chat(prompt, system=system, json_mode=json_mode, max_tokens=max_tokens)
         self.ledger.record_cost(agent, model, tin, tout, 0.0)
         return Reply(text=text, model=model, cost_usd=0.0)
@@ -80,6 +85,11 @@ class LLM:
         if self.s.dry_run:
             return []
         return self.searx.search(query, time_range=time_range, limit=limit)
+
+    def read_page_local(self, url: str, max_chars: int = 3000) -> str:
+        if self.s.dry_run:
+            return ""
+        return fetch_text(url, max_chars=max_chars)
 
     # ---- plain calls -----------------------------------------------------
 

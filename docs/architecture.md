@@ -97,10 +97,23 @@ Other vendors (Gemini, Grok, OpenAI) plug in behind the same `LLM` interface lat
   status and recent findings as context. clAIr runs locally here until the bridge to her
   Cloudflare Worker is built, at which point this channel is routed to her.
 
+## Milestone 4: Splinter Operator and missions
+
+- `wetworks/missions.py`: mission queue (queued, running, done, failed, cancelled) with step log,
+  crash recovery (running missions go back to the queue after a restart) and cancellation.
+- `wetworks/operators.py` `SplinterOperator`: one worker thread, one mission at a time, so the GPU
+  isn't split. Posts to Discord and back into the chat channel that asked when a mission finishes.
+- `wetworks/cells/splinter.py`: plan → research (SearXNG + reading the top pages) → write-up with
+  numbered citations and a "Next step:" line. Sources are taken from real search results only.
+- Page reading is limited to public internet addresses (no Docker network, LAN, Tailscale or
+  metadata endpoints) and checks every redirect.
+- Chat: clAIr and The Architect reply in JSON and can open a mission when Patrick asks for work.
+- Console: Missions tab (phone) / under Ops (desktop), new-mission box, live status, detail sheet
+  with the write-up, sources and how it was done.
+
 ## Next milestones
 
 1. Revenue cell (Sleeper), fed by Intel's money findings.
-2. Splinter Operator and mission queue for on-demand work.
 3. clAIr bridge: The Architect ↔ Cloudflare Worker.
 4. The Forge: local model container with GPU.
 5. Ops-center UI (gritty Splinter Cell style).

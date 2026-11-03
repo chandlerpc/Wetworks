@@ -39,7 +39,8 @@ def _iso(dt) -> str | None:
     return dt.astimezone(timezone.utc).isoformat() if dt else None
 
 
-def create_app(*, settings, architect, cells: dict, comms, events, scheduler=None) -> Starlette:
+def create_app(*, settings, architect, cells: dict, comms, events, scheduler=None,
+               missions=None, open_mission=None) -> Starlette:
     def run_bg(fn):
         threading.Thread(target=fn, daemon=True).start()
 
@@ -112,6 +113,31 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
             return JSONResponse({"error": "Unknown action."}, status_code=404)
         return JSONResponse({"ok": True}, status_code=202)
 
+    async def list_missions(request: Request):
+        return JSONResponse({"missions": missions.recent() if missions else []})
+
+    async def get_mission(request: Request):
+        m = missions.get(int(request.path_params["mid"])) if missions else None
+        if not m:
+            return JSONResponse({"error": "No mission with that number."}, status_code=404)
+        return JSONResponse(m)
+
+    async def new_mission(request: Request):
+        if not open_mission:
+            return JSONResponse({"error": "Missions aren't available."}, status_code=503)
+        try:
+            body = await request.json()
+            m = open_mission(str(body.get("title", "")), str(body.get("request", "")), "console")
+        except ValueError:
+            return JSONResponse({"error": "Describe what the mission should do."}, status_code=400)
+        return JSONResponse(m, status_code=202)
+
+    async def cancel_mission(request: Request):
+        ok = missions.cancel(int(request.path_params["mid"])) if missions else False
+        if not ok:
+            return JSONResponse({"error": "Only queued or running missions can be cancelled."}, status_code=409)
+        return JSONResponse({"ok": True}, status_code=202)
+
     async def index(request: Request):
         return FileResponse(CONSOLE_DIR / "index.html")
 
@@ -123,6 +149,10 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
         Route("/api/comms/{channel}", get_messages, methods=["GET"]),
         Route("/api/comms/{channel}", post_message, methods=["POST"]),
         Route("/api/actions/{name}", action, methods=["POST"]),
+        Route("/api/missions", list_missions, methods=["GET"]),
+        Route("/api/missions", new_mission, methods=["POST"]),
+        Route("/api/missions/{mid:int}", get_mission, methods=["GET"]),
+        Route("/api/missions/{mid:int}/cancel", cancel_mission, methods=["POST"]),
         Mount("/static", StaticFiles(directory=CONSOLE_DIR), name="static"),
     ]
     return Starlette(routes=routes, middleware=[Middleware(TokenAuth, token=settings.console_token)])

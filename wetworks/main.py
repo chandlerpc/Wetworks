@@ -3,6 +3,7 @@
     python -m wetworks.main                 run everything: scheduler + Command API/console
     python -m wetworks.main brief morning   send one brief now and exit
     python -m wetworks.main run intel       run one cell now and print what it found
+    python -m wetworks.main mission <text>  run one mission now and print the result
 """
 
 import logging
@@ -14,9 +15,11 @@ from apscheduler.triggers.cron import CronTrigger
 from .architect import Architect
 from .cells.base import CellContext
 from .cells.intel import Intel
+from .cells.splinter import Splinter
 from .comms import Comms
 from .config import load_settings
-from .operators import SleeperOperator
+from .missions import MissionStore
+from .operators import SleeperOperator, SplinterOperator
 
 log = logging.getLogger("wetworks")
 
@@ -31,7 +34,19 @@ def build(settings):
     ctx = CellContext(settings=settings, llm=architect.llm, findings=architect.findings, events=architect.events)
     intel = Intel(ctx)
     architect.min_importance = int(intel.config.get("intel", {}).get("min_importance_for_brief", 2))
-    comms = Comms(settings.data_dir / "comms.db", architect.llm, architect.events, architect.context_block)
+    missions = MissionStore(settings.data_dir / "missions.db")
+    operator = SplinterOperator(missions, Splinter(ctx, missions), events=architect.events, notify=architect.notify)
+
+    def open_mission(title: str, request: str, source: str) -> dict:
+        m = missions.create(title, request, source=source)
+        architect.events.add("splinter", "info", f"Mission #{m['id']} queued: {m['title']}")
+        operator.submit()
+        return m
+
+    comms = Comms(settings.data_dir / "comms.db", architect.llm, architect.events, architect.context_block,
+                  open_mission=open_mission)
+    operator.on_done = comms.mission_report
+    comms.missions, comms.operator, comms.open_mission_fn = missions, operator, open_mission
     return architect, {"intel": intel}, comms
 
 
@@ -42,6 +57,13 @@ def run() -> None:
 
     if len(sys.argv) >= 3 and sys.argv[1] == "brief":
         architect.brief(sys.argv[2])
+        return
+    if len(sys.argv) >= 3 and sys.argv[1] == "mission":
+        m = comms.open_mission_fn("", " ".join(sys.argv[2:]), "console")
+        done = comms.operator.run_one(comms.missions.get(m["id"]))
+        print(f"Mission #{done['id']} {done['status']}: {done['title']}\n\n{done['result']}")
+        for s in done["sources"]:
+            print(f"[{s['n']}] {s['title']} {s['url']}")
         return
     if len(sys.argv) >= 3 and sys.argv[1] == "run":
         for f in cells[sys.argv[2]].safe_run():
@@ -57,6 +79,7 @@ def run() -> None:
     sleepers.register(cells["intel"], [settings.morning_brief, settings.evening_brief],
                       lead_minutes=settings.intel_lead_minutes)
     sched.start()
+    comms.operator.start()
 
     intel = cells["intel"]
     trial = " (2-week trial)" if intel.in_trial() else ""
@@ -80,7 +103,8 @@ def run() -> None:
     from .api import create_app
 
     app = create_app(settings=settings, architect=architect, cells=cells, comms=comms,
-                     events=architect.events, scheduler=sched)
+                     events=architect.events, scheduler=sched, missions=comms.missions,
+                     open_mission=comms.open_mission_fn)
     log.info("Console listening on port %d", settings.console_port)
     uvicorn.run(app, host="0.0.0.0", port=settings.console_port, log_level="warning")
     sched.shutdown(wait=False)
