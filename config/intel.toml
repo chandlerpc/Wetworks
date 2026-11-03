@@ -4,7 +4,9 @@
 #   name        short label shown in briefs
 #   brief       what to look for, written like instructions to an analyst
 #   max_items   cap on new findings per run (keeps briefs short and costs down)
-#   searches    max web searches per run for this topic (each costs about $0.01)
+#   queries     search terms for the free local search (SearXNG); 2-3 is plenty
+#   time_range  how fresh results must be: day | week | month
+#   searches    max web searches per run when a paid provider is used (about $0.01 each)
 
 [intel]
 trial_start = "2026-11-03"   # 2-week trial; The Architect reviews it after
@@ -12,6 +14,8 @@ min_importance_for_brief = 2
 
 [[topics]]
 name = "AI models & tools"
+queries = ["new AI model release", "LLM API pricing change", "AI agent framework release"]
+time_range = "week"
 enabled = true
 max_items = 4
 searches = 3
@@ -23,6 +27,8 @@ Prioritise anything that changes what Wetworks should use or what it costs to ru
 
 [[topics]]
 name = "Money opportunities"
+queries = ["small business AI automation demand", "Orlando small business AI software", "solo developer SaaS revenue"]
+time_range = "week"
 enabled = true
 max_items = 4
 searches = 3
@@ -35,6 +41,8 @@ are paying for that one developer could build. Skip generic "side hustle" listic
 
 [[topics]]
 name = "Job market"
+queries = ["healthcare imaging software developer jobs Florida", "AI developer remote jobs hiring", "talent and learning analyst jobs Orlando remote"]
+time_range = "week"
 enabled = true
 max_items = 3
 searches = 3
@@ -46,6 +54,8 @@ Florida or remote. Note which skills are in demand.
 
 [[topics]]
 name = "Black Desert Online"
+queries = ["Black Desert Online patch notes", "Black Desert Online event", "Black Desert node war siege update"]
+time_range = "week"
 enabled = true
 max_items = 3
 searches = 2

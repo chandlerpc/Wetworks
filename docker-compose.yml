@@ -9,11 +9,44 @@ services:
     volumes:
       - wetworks-data:/data
       - ./config:/app/config:ro
-    logging:
+    depends_on:
+      - ollama
+      - searxng
+    logging: &logging
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
 
+  # Free local models on the MSI's GPU (also the start of The Forge)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: wetworks-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama-models:/root/.ollama
+    environment:
+      OLLAMA_KEEP_ALIVE: 10m   # free GPU memory 10 min after use, so BDO gets it back
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    logging: *logging
+
+  # Free self-hosted web search
+  searxng:
+    image: searxng/searxng:latest
+    container_name: wetworks-searxng
+    restart: unless-stopped
+    volumes:
+      - ./config/searxng/settings.yml:/etc/searxng/settings.yml:ro
+    environment:
+      SEARXNG_SECRET: ${SEARXNG_SECRET:-wetworks-local-only}
+    logging: *logging
+
 volumes:
   wetworks-data:
+  ollama-models:

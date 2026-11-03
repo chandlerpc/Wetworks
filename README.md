@@ -7,6 +7,17 @@ Runs 24/7 on the MSI (WSL2 + Docker). See [docs/architecture.md](docs/architectu
 
 - Milestone 1: The Architect sends morning and evening briefs to Discord, tracks spend against a monthly cap, and reports host health.
 - Milestone 2: cell runtime and the Intel Sleeper, which searches the web for each topic in `config/intel.toml` before every brief.
+- Milestone 2.1: free by default. Briefs and Intel run on a local model (Ollama) and self-hosted search (SearXNG). Paid providers are opt-in via `WETWORKS_PROVIDER`.
+
+## First-time setup of the free stack
+
+```
+docker compose up -d --build
+```
+
+```
+docker compose exec ollama ollama pull gemma4:12b
+```
 
 ## Intel topics
 

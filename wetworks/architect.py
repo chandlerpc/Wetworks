@@ -78,7 +78,10 @@ class Architect:
             + ". Don't repeat every finding; they're listed below your summary. Under 120 words."
         )
         try:
-            reply = self.llm.ask("architect", prompt, tier="work", system=SYSTEM, max_tokens=400, essential=True)
+            if self.s.provider == "local":
+                reply = self.llm.ask_local("architect", prompt, system=SYSTEM, max_tokens=400)
+            else:
+                reply = self.llm.ask("architect", prompt, tier="work", system=SYSTEM, max_tokens=400, essential=True)
             body = reply.text.strip()
         except BudgetExceeded:
             body = "Budget exhausted; summary skipped."

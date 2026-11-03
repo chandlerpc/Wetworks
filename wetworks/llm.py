@@ -7,6 +7,7 @@ import httpx
 
 from .config import Settings
 from .ledger import SEARCH_PRICE, Ledger
+from .local import Ollama, SearXNG
 
 log = logging.getLogger("wetworks.llm")
 
@@ -27,11 +28,24 @@ class LLM:
     def __init__(self, settings: Settings, ledger: Ledger):
         self.s = settings
         self.ledger = ledger
-        self._client = None
-        if not settings.dry_run:
+        self._anthropic = None
+        self.ollama = Ollama(settings.ollama_url, settings.local_model, settings.local_num_ctx)
+        self.searx = SearXNG(settings.searxng_url)
+
+    @property
+    def _client(self):
+        """Anthropic client, created only when a paid Claude call is actually made."""
+        if self.s.dry_run:
+            return self._anthropic  # None unless a test injected a fake
+        if self._anthropic is None:
             import anthropic
 
-            self._client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+            self._anthropic = anthropic.Anthropic(api_key=self.s.anthropic_api_key)
+        return self._anthropic
+
+    @_client.setter
+    def _client(self, value):
+        self._anthropic = value
 
     # ---- helpers ---------------------------------------------------------
 
@@ -49,6 +63,23 @@ class LLM:
     @property
     def grok_available(self) -> bool:
         return bool(self.s.xai_api_key) and not self.s.dry_run
+
+    # ---- free local calls ------------------------------------------------
+
+    def ask_local(self, agent: str, prompt: str, *, system: str = "", json_mode: bool = False,
+                  max_tokens: int = 1024) -> Reply:
+        """Ask the local Ollama model. Free; logged at $0 so usage still shows in the ledger."""
+        model = f"local:{self.s.local_model}"
+        if self.s.dry_run:
+            return Reply(text="[]" if json_mode else f"[dry-run {model}] {prompt[:200]}", model=model, cost_usd=0.0)
+        text, tin, tout = self.ollama.chat(prompt, system=system, json_mode=json_mode, max_tokens=max_tokens)
+        self.ledger.record_cost(agent, model, tin, tout, 0.0)
+        return Reply(text=text, model=model, cost_usd=0.0)
+
+    def web_search_local(self, query: str, time_range: str = "week", limit: int = 8) -> list[dict]:
+        if self.s.dry_run:
+            return []
+        return self.searx.search(query, time_range=time_range, limit=limit)
 
     # ---- plain calls -----------------------------------------------------
 

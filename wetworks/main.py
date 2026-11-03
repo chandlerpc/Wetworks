@@ -61,7 +61,8 @@ def run() -> None:
     trial = " (2-week trial)" if intel.in_trial() else ""
     log.info("The Architect is online. Briefs at %s and %s %s (dry_run=%s)",
              settings.morning_brief, settings.evening_brief, settings.timezone, settings.dry_run)
-    source = "Grok" if architect.llm.grok_available else "Claude web search"
+    source = {"local": f"local {settings.local_model} + SearXNG (free)", "grok": "Grok (paid)",
+              "claude": "Claude web search (paid)"}.get(settings.provider, settings.provider)
     architect.notify.send(
         f"🟢 The Architect is online. Intel cell active{trial}: {len(intel.topics)} topics via {source}, "
         f"running {settings.intel_lead_minutes} min before each brief."

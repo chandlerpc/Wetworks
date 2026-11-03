@@ -72,7 +72,18 @@ Other vendors (Gemini, Grok, OpenAI) plug in behind the same `LLM` interface lat
 - `wetworks/cells/intel.py`: one web-search pass per topic in `config/intel.toml`.
   Grok (web + X search) when `XAI_API_KEY` is set, Claude web search otherwise, with automatic fallback.
 - Briefs now include an Intel section grouped by topic (🔴 act today, 🟠 act this week).
-- Estimated cost: about $0.30–0.40 per Intel run with the default four topics, roughly $20/month.
+- Paid search estimate (Claude/Grok): about $0.30–0.40 per Intel run, roughly $20/month.
+
+## Milestone 2.1: free by default
+
+- `WETWORKS_PROVIDER=local` (default): briefs and Intel run on **Ollama** (local model on the
+  MSI's GPU, default `gemma4:12b`) and **SearXNG** (self-hosted search). Cost: $0.
+- Intel's local flow: SearXNG runs each topic's `queries`, already-reported URLs are dropped,
+  and the local model picks and summarises the best results by index, so URLs always come
+  from real search results, never from the model.
+- `claude` and `grok` providers stay available for short paid tests.
+- Build-phase budget cap: $5/month in `.env.example`. Raise it once everything is proven.
+- Ollama unloads the model 10 minutes after use so the GPU is free for Black Desert.
 
 ## Next milestones
 
