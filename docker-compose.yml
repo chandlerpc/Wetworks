@@ -1,0 +1,18 @@
+services:
+  architect:
+    build: .
+    container_name: wetworks-architect
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      TZ: America/New_York
+    volumes:
+      - wetworks-data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  wetworks-data:
