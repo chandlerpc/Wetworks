@@ -83,6 +83,14 @@ def run() -> None:
     sched.start()
     comms.operator.start()
 
+    if comms.bridge:
+        ok, why = comms.bridge.check()
+        comms.clair_mode = "cloudflare" if ok else "fallback"
+        architect.events.add("clair", "info" if ok else "warn",
+                             "Connected to clAIr on Cloudflare" if ok else f"clAIr bridge not working: {why}. Answering locally.")
+    else:
+        architect.events.add("clair", "info", "clAIr is running locally (no Cloudflare bridge configured)")
+
     intel = cells["intel"]
     trial = " (2-week trial)" if intel.in_trial() else ""
     source = {"local": f"local {settings.local_model} + SearXNG (free)", "grok": "Grok (paid)",

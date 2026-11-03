@@ -254,3 +254,19 @@ def test_bridge_client_errors(monkeypatch):
     assert sent["headers"]["Authorization"] == "Bearer tok"
     assert sent["body"]["messages"] == [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "yo"}]
     assert not ClairBridge("", "").configured
+
+
+@pytest.mark.parametrize("status,ok,needle", [(400, True, "connected"), (401, False, "rejected"), (404, False, "isn't the /wetworks"),
+                                              (500, False, "500")])
+def test_bridge_check(monkeypatch, status, ok, needle):
+    from wetworks.bridge import ClairBridge
+
+    monkeypatch.setattr("wetworks.bridge.httpx.post", lambda *a, **k: SimpleNamespace(status_code=status))
+    got_ok, why = ClairBridge("https://x/wetworks", "t").check()
+    assert got_ok is ok and needle in why
+
+
+def test_console_assets_are_versioned_and_not_cached(tmp_path):
+    app, *_ = make(tmp_path)
+    r = call(app, "GET", "/")
+    assert b"/static/console.js?v=" in r["body"] and b"/static/console.css?v=" in r["body"]

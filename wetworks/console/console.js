@@ -117,10 +117,19 @@
   }
 
   // ---- Comms ----------------------------------------------------------
+  // Pin the thread to the bottom unless the reader has scrolled up to read history.
+  let stick = true;
+  const toBottom = () => { const t = $("#thread"); t.scrollTop = t.scrollHeight; };
+  function setTopbarHeight() {
+    document.documentElement.style.setProperty("--topbar-h", `${$(".topbar").offsetHeight}px`);
+  }
+
   function showTyping(on) {
     const t = $("#typing");
+    const was = !t.hidden;
     t.hidden = !on;
     if (on) t.textContent = `${NAMES[channel]} is replying`;
+    if (on !== was && stick) requestAnimationFrame(toBottom);
   }
 
   let clairMode = "local";
@@ -144,6 +153,7 @@
     updateLinkNote();
     $("#thread").replaceChildren();
     lastMsg[c] = 0;
+    stick = true;
     loadMessages();
   }
 
@@ -166,8 +176,8 @@
       thread.append(b);
       lastMsg[c] = Math.max(lastMsg[c], m.id);
     });
-    if (messages.length) thread.scrollTop = thread.scrollHeight;
     showTyping(typing);
+    if (messages.length && stick) requestAnimationFrame(toBottom);
   }
 
   async function send(e) {
@@ -180,6 +190,7 @@
     try {
       await api(`/api/comms/${channel}`, { method: "POST", body: JSON.stringify({ text }) });
       box.value = ""; autosize();
+      stick = true;
       showTyping(true);
       await loadMessages();
     } catch (err) {
@@ -344,7 +355,7 @@
     $$(".pane").forEach((p) => p.classList.toggle("active", p.id === `pane-${name}`));
     $$(".tabs button").forEach((b) => { if (b.dataset.pane === name) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
     store.set("wetworks.pane", name);
-    if (name === "comms") setTimeout(() => { const t = $("#thread"); t.scrollTop = t.scrollHeight; }, 0);
+    if (name === "comms") { stick = true; setTopbarHeight(); requestAnimationFrame(toBottom); }
   }
 
   // ---- Session --------------------------------------------------------
@@ -391,6 +402,13 @@
   $("#logout").addEventListener("click", () => lock());
   $("#compose").addEventListener("submit", send);
   $("#msg").addEventListener("input", autosize);
+  $("#msg").addEventListener("focus", () => { if (stick) setTimeout(toBottom, 300); }); // after the keyboard opens
+  $("#thread").addEventListener("scroll", () => {
+    const t = $("#thread");
+    stick = t.scrollHeight - t.scrollTop - t.clientHeight < 60;
+  }, { passive: true });
+  window.addEventListener("resize", () => { setTopbarHeight(); if (stick) toBottom(); });
+  setTopbarHeight();
   $("#msg").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && window.matchMedia("(min-width: 1000px)").matches) { e.preventDefault(); $("#compose").requestSubmit(); } });
   $$(".channel").forEach((b) => b.addEventListener("click", () => selectChannel(b.dataset.channel)));
   $$(".tabs button").forEach((b) => b.addEventListener("click", () => showPane(b.dataset.pane)));

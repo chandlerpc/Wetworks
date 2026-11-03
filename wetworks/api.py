@@ -12,13 +12,27 @@ from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import FileResponse, JSONResponse
+from starlette.responses import HTMLResponse, JSONResponse
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
 from .health import snapshot
 
 CONSOLE_DIR = Path(__file__).parent / "console"
+
+
+class FreshStatic(StaticFiles):
+    """Static files that the browser must re-check every time, so updates show up immediately
+    (home-screen apps on phones otherwise keep old copies for a long time)."""
+
+    async def get_response(self, path, scope):
+        resp = await super().get_response(path, scope)
+        resp.headers["Cache-Control"] = "no-cache"
+        return resp
+
+
+def _asset_version() -> str:
+    return str(int(max(p.stat().st_mtime for p in CONSOLE_DIR.iterdir() if p.is_file())))
 
 
 class TokenAuth(BaseHTTPMiddleware):
@@ -140,7 +154,11 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
         return JSONResponse({"ok": True}, status_code=202)
 
     async def index(request: Request):
-        return FileResponse(CONSOLE_DIR / "index.html")
+        v = _asset_version()
+        html = (CONSOLE_DIR / "index.html").read_text()
+        for asset in ("console.css", "console.js", "manifest.json"):
+            html = html.replace(f"/static/{asset}", f"/static/{asset}?v={v}")
+        return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
     routes = [
         Route("/", index),
@@ -154,6 +172,6 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
         Route("/api/missions", new_mission, methods=["POST"]),
         Route("/api/missions/{mid:int}", get_mission, methods=["GET"]),
         Route("/api/missions/{mid:int}/cancel", cancel_mission, methods=["POST"]),
-        Mount("/static", StaticFiles(directory=CONSOLE_DIR), name="static"),
+        Mount("/static", FreshStatic(directory=CONSOLE_DIR), name="static"),
     ]
     return Starlette(routes=routes, middleware=[Middleware(TokenAuth, token=settings.console_token)])

@@ -22,6 +22,25 @@ class ClairBridge:
     def configured(self) -> bool:
         return bool(self.url and self.token)
 
+    def check(self) -> tuple[bool, str]:
+        """Confirm the Worker is reachable and accepts our key, without spending a model call.
+
+        An authorised request with no messages is rejected by the Worker with 400 before it
+        reaches Gemini; a wrong key gets 401.
+        """
+        try:
+            r = httpx.post(self.url, headers={"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"},
+                           json={"owner": self.owner, "messages": []}, timeout=15)
+        except httpx.HTTPError as e:
+            return False, f"can't reach {self.url} ({type(e).__name__})"
+        if r.status_code == 400:
+            return True, "connected"
+        if r.status_code == 401:
+            return False, "the Worker rejected the bridge key (WETWORKS_CLAIR_TOKEN or the Cloudflare secret)"
+        if r.status_code in (404, 405):
+            return False, "that URL isn't the /wetworks route, or the updated Worker code isn't deployed yet"
+        return False, f"the Worker answered {r.status_code}"
+
     def ask(self, history: list[dict], context: str) -> tuple[str, dict | None]:
         """history: [{"sender": "patrick" | "clair", "text": ...}], oldest first."""
         messages = [

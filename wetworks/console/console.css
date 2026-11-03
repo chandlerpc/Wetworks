@@ -144,7 +144,16 @@ input:focus, textarea:focus { border-color: var(--phosphor-dim); outline: none; 
 .feed .empty { display: block; color: var(--fog); }
 
 /* ---- Comms ----------------------------------------------------------- */
-#pane-comms.active { display: flex; flex-direction: column; min-height: calc(100dvh - 140px - var(--tabbar)); }
+[hidden] { display: none !important; }
+
+/* Phone: Comms fills the space between the top bar and the tabs; only the thread scrolls. */
+#pane-comms.active {
+  display: flex; flex-direction: column;
+  position: fixed; left: 0; right: 0;
+  top: var(--topbar-h, 72px); bottom: calc(var(--tabbar) + env(safe-area-inset-bottom));
+  padding: var(--s3) var(--s4) var(--s3);
+}
+#pane-comms > h2 { display: none; }
 .channels { display: flex; gap: var(--s1); padding: 3px; border: 1px solid var(--seam); border-radius: 8px; background: #070A08; width: max-content; }
 .channel { background: transparent; color: var(--fog); border-color: transparent; min-height: 38px; padding: 8px 14px; }
 .channel[aria-selected="true"] { background: var(--hull); color: var(--paper); border-color: var(--seam); }
@@ -155,7 +164,9 @@ input:focus, textarea:focus { border-color: var(--phosphor-dim); outline: none; 
 .link-note.cloudflare::before { background: var(--phosphor); box-shadow: 0 0 6px var(--phosphor); }
 .link-note.fallback { color: var(--amber); }
 .link-note.fallback::before { background: var(--amber); }
-.thread { flex: 1; overflow-y: auto; padding: var(--s4) 0; display: flex; flex-direction: column; gap: var(--s3); max-height: 58vh; }
+.thread { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  padding: var(--s4) 2px; display: flex; flex-direction: column; gap: var(--s3); }
+.thread > :first-child { margin-top: auto; } /* short threads sit at the bottom, like a chat */
 .msg { max-width: 86%; padding: var(--s2) var(--s3); border-radius: 10px; font-size: 15.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .msg.them { align-self: flex-start; background: var(--hull); border: 1px solid var(--seam); border-bottom-left-radius: 2px; }
 .msg.me { align-self: flex-end; background: #1B2E1A; border: 1px solid var(--phosphor-dim); border-bottom-right-radius: 2px; }
@@ -166,7 +177,8 @@ input:focus, textarea:focus { border-color: var(--phosphor-dim); outline: none; 
 .typing::after { content: "▍"; animation: blink 1s steps(1) infinite; margin-left: 2px; }
 @keyframes blink { 50% { opacity: 0; } }
 
-.compose { display: flex; gap: var(--s2); align-items: flex-end; position: sticky; bottom: calc(var(--tabbar) + env(safe-area-inset-bottom) + 8px); }
+.compose { display: flex; gap: var(--s2); align-items: flex-end; flex: 0 0 auto; padding-top: var(--s2); }
+.typing { flex: 0 0 auto; }
 .compose textarea { resize: none; max-height: 140px; }
 
 /* ---- Intel ----------------------------------------------------------- */
@@ -279,9 +291,9 @@ input:focus, textarea:focus { border-color: var(--phosphor-dim); outline: none; 
   #pane-intel { grid-area: intel; }
   .pane, .pane.active { display: block; }
   .sheet { border-radius: 14px; border-bottom: 1px solid var(--seam); margin: auto; }
-  #pane-comms, #pane-comms.active { display: flex; flex-direction: column; min-height: auto; height: calc(100vh - 120px); position: sticky; top: 90px; }
-  .thread { max-height: none; }
-  .compose { position: static; }
+  #pane-comms, #pane-comms.active { display: flex; flex-direction: column; height: calc(100vh - 120px);
+    position: sticky; top: 90px; left: auto; right: auto; bottom: auto; padding: 0 0 0 var(--s5); }
+  #pane-comms > h2 { display: block; }
   .pane { border-left: 1px solid var(--seam); padding-left: var(--s5); }
   .pane:first-child { border-left: 0; padding-left: 0; }
   .feed { max-height: 40vh; }
