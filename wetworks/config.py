@@ -1,5 +1,6 @@
 """Settings, loaded from environment variables (prefix WETWORKS_) or .env."""
 
+import os
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -8,8 +9,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="WETWORKS_", env_file=".env", extra="ignore")
 
-    # Secrets. ANTHROPIC_API_KEY is read without the prefix so the SDK sees it too.
+    # Secrets. ANTHROPIC_API_KEY / XAI_API_KEY are also read without the prefix.
     anthropic_api_key: str = ""
+    xai_api_key: str = ""
     discord_webhook_url: str = ""
 
     # Behaviour
@@ -20,18 +22,30 @@ class Settings(BaseSettings):
     monthly_budget_usd: float = 250.0
     budget_warn_ratio: float = 0.8
 
-    # Model tiers
+    # Claude model tiers
     model_route: str = "claude-haiku-5-5"
     model_work: str = "claude-sonnet-5-5"
     model_think: str = "claude-opus-5-5"
+    claude_web_search_tool: str = "web_search_20260209"
+
+    # Grok (used by Intel when XAI_API_KEY is set). Prices are USD per million tokens;
+    # check docs.x.ai and update if they differ.
+    grok_model: str = "grok-4.6"
+    grok_price_in: float = 3.0
+    grok_price_out: float = 15.0
+
+    # Sleepers
+    intel_lead_minutes: int = 20  # Intel runs this long before each brief
+    intel_tier: str = "work"  # Claude tier used for Intel when Grok isn't available
 
     data_dir: Path = Path("/data")
+    config_dir: Path = Path("config")
 
 
 def load_settings() -> Settings:
-    import os
-
     s = Settings()
     if not s.anthropic_api_key:
         s.anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not s.xai_api_key:
+        s.xai_api_key = os.environ.get("XAI_API_KEY", "")
     return s

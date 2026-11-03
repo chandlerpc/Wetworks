@@ -1,0 +1,55 @@
+# Intel cell topics. Add a [[topics]] block to watch something new; no rebuild needed,
+# the file is read fresh on every run. Set enabled = false to pause a topic.
+#
+#   name        short label shown in briefs
+#   brief       what to look for, written like instructions to an analyst
+#   max_items   cap on new findings per run (keeps briefs short and costs down)
+#   searches    max web searches per run for this topic (each costs about $0.01)
+
+[intel]
+trial_start = "2026-11-03"   # 2-week trial; The Architect reviews it after
+min_importance_for_brief = 2
+
+[[topics]]
+name = "AI models & tools"
+enabled = true
+max_items = 4
+searches = 3
+brief = """
+New AI model releases, API pricing changes, and agent frameworks or developer tools from
+Anthropic, OpenAI, Google, xAI, Meta, Mistral and notable open-source projects.
+Prioritise anything that changes what Wetworks should use or what it costs to run.
+"""
+
+[[topics]]
+name = "Money opportunities"
+enabled = true
+max_items = 4
+searches = 3
+brief = """
+Concrete ways a solo AI/software developer in Central Florida (Orlando, Sanford, Lake Mary)
+can make money: small businesses and startups looking for AI automation or custom software,
+freelance demand trends, grants or programs for small tech businesses, and products people
+are paying for that one developer could build. Skip generic "side hustle" listicles.
+"""
+
+[[topics]]
+name = "Job market"
+enabled = true
+max_items = 3
+searches = 3
+brief = """
+Hiring trends and notable openings for (1) AI/software developer and technical support roles
+in healthcare tech and medical imaging, and (2) talent and learning analyst roles, in Central
+Florida or remote. Note which skills are in demand.
+"""
+
+[[topics]]
+name = "Black Desert Online"
+enabled = true
+max_items = 3
+searches = 2
+brief = """
+Black Desert Online (NA/global) patch notes, events, class changes, and anything affecting
+guild wars and node/siege war meta. Official sources and major community sites first.
+"""

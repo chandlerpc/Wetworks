@@ -1,9 +1,10 @@
-"""The Architect — overseer. Milestone 1: compiles and sends the daily briefs."""
+"""The Architect — overseer. Compiles the daily briefs from host status and cell findings."""
 
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from .config import Settings
+from .findings import Finding, FindingsStore
 from .health import format_health, snapshot
 from .ledger import Ledger
 from .llm import LLM, BudgetExceeded
@@ -17,14 +18,34 @@ SYSTEM = (
     "free up time, build games, create content."
 )
 
+MAX_BRIEF_FINDINGS = 12
+
+
+def format_findings(findings: list[Finding]) -> str:
+    if not findings:
+        return ""
+    by_topic: dict[str, list[Finding]] = {}
+    for f in findings[:MAX_BRIEF_FINDINGS]:
+        by_topic.setdefault(f.topic, []).append(f)
+    lines = []
+    for topic, items in by_topic.items():
+        lines.append(f"__{topic}__")
+        for f in items:
+            flag = "🔴 " if f.importance >= 5 else "🟠 " if f.importance == 4 else ""
+            link = f" <{f.url}>" if f.url else ""
+            lines.append(f"• {flag}**{f.title}** — {f.summary}{link}")
+    return "\n".join(lines)
+
 
 class Architect:
     def __init__(self, settings: Settings):
         self.s = settings
         self.ledger = Ledger(settings.data_dir / "ledger.db")
+        self.findings = FindingsStore(settings.data_dir / "findings.db")
         self.llm = LLM(settings, self.ledger)
         self.notify = Notifier(settings.discord_webhook_url, dry_run=settings.dry_run)
         self.tz = ZoneInfo(settings.timezone)
+        self.min_importance = 2
 
     def status_block(self) -> str:
         now = datetime.now(timezone.utc)
@@ -42,15 +63,19 @@ class Architect:
         return "\n".join(lines)
 
     def brief(self, kind: str) -> str:
-        """kind = morning | evening. Builds the brief and sends it."""
+        """kind = morning | evening. Builds the brief, sends it, and marks findings reported."""
         stamp = datetime.now(self.tz).strftime("%a %b %d, %I:%M %p %Z")
         status = self.status_block()
-        title = f"**{kind.title()} brief — {stamp}**"
+        findings = self.findings.unreported(self.min_importance)
+        intel = format_findings(findings)
+
+        digest = "\n".join(f"- [{f.topic}] (imp {f.importance}) {f.title}: {f.summary}" for f in findings[:MAX_BRIEF_FINDINGS])
         prompt = (
             f"Write the {kind} brief. Status data:\n{status}\n\n"
-            "No cells are active yet (Revenue, Code, Intel, The Forge are planned). "
-            "Give a 2-4 line summary and, for the morning, one suggested focus for today "
-            "drawn from the mission priorities. Under 120 words."
+            f"New Intel findings:\n{digest or '(none this cycle)'}\n\n"
+            "Give a 2-4 line summary of what matters most"
+            + (" and one suggested focus for today drawn from the mission priorities" if kind == "morning" else "")
+            + ". Don't repeat every finding; they're listed below your summary. Under 120 words."
         )
         try:
             reply = self.llm.ask("architect", prompt, tier="work", system=SYSTEM, max_tokens=400, essential=True)
@@ -59,6 +84,12 @@ class Architect:
             body = "Budget exhausted; summary skipped."
         except Exception as e:  # never let a model error kill the brief
             body = f"Model call failed ({type(e).__name__}); raw status only."
-        text = f"{title}\n{body}\n\n```\n{status}\n```"
+
+        parts = [f"**{kind.title()} brief — {stamp}**", body]
+        if intel:
+            parts += ["", "**Intel**", intel]
+        parts += ["", f"```\n{status}\n```"]
+        text = "\n".join(parts)
         self.notify.send(text)
+        self.findings.mark_reported()
         return text

@@ -64,10 +64,20 @@ Other vendors (Gemini, Grok, OpenAI) plug in behind the same `LLM` interface lat
 - Host health in each brief (disk, memory, uptime).
 - Dry-run mode for testing without API keys.
 
+## Milestone 2: cell runtime + Intel
+
+- `wetworks/cells/base.py`: base `Cell` (Sleeper or Splinter, 2-week trial tracking, crash-safe runs).
+- `wetworks/operators.py`: Sleeper Operator schedules cells; Intel wakes 20 min before each brief.
+- `wetworks/findings.py`: shared findings store; URLs are de-duplicated for 14 days.
+- `wetworks/cells/intel.py`: one web-search pass per topic in `config/intel.toml`.
+  Grok (web + X search) when `XAI_API_KEY` is set, Claude web search otherwise, with automatic fallback.
+- Briefs now include an Intel section grouped by topic (🔴 act today, 🟠 act this week).
+- Estimated cost: about $0.30–0.40 per Intel run with the default four topics, roughly $20/month.
+
 ## Next milestones
 
-1. Cell runtime: a base `Cell` class, Splinter/Sleeper operators, mission queue.
-2. Revenue and Intel cells (Sleepers) on schedules.
+1. Revenue cell (Sleeper), fed by Intel's money findings.
+2. Splinter Operator and mission queue for on-demand work.
 3. clAIr bridge: The Architect ↔ Cloudflare Worker.
 4. The Forge: local model container with GPU.
 5. Ops-center UI (gritty Splinter Cell style).

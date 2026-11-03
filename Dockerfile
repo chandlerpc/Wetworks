@@ -5,6 +5,7 @@ WORKDIR /app
 
 COPY pyproject.toml ./
 COPY wetworks ./wetworks
+COPY config ./config
 RUN pip install --no-cache-dir .
 
 RUN useradd -m architect && mkdir -p /data && chown architect /data

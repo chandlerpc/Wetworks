@@ -4,12 +4,15 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-# USD per million tokens (input, output). Update when Anthropic changes prices.
+# USD per million tokens (input, output). Update when vendors change prices.
 PRICES: dict[str, tuple[float, float]] = {
     "claude-opus-5-5": (4.00, 20.00),
     "claude-sonnet-5-5": (2.00, 10.00),
     "claude-haiku-5-5": (0.10, 0.50),
 }
+
+# USD per web search call.
+SEARCH_PRICE = {"claude": 0.01, "grok": 0.01}
 
 
 def cost_usd(model: str, input_tokens: int, output_tokens: int) -> float:
@@ -35,8 +38,15 @@ class Ledger:
         )
         self.db.commit()
 
-    def record(self, agent: str, model: str, input_tokens: int, output_tokens: int) -> float:
-        cost = cost_usd(model, input_tokens, output_tokens)
+    def record(
+        self, agent: str, model: str, input_tokens: int, output_tokens: int, extra_usd: float = 0.0
+    ) -> float:
+        """Record a call. extra_usd covers non-token charges such as web searches."""
+        cost = cost_usd(model, input_tokens, output_tokens) + extra_usd
+        return self.record_cost(agent, model, input_tokens, output_tokens, cost)
+
+    def record_cost(self, agent: str, model: str, input_tokens: int, output_tokens: int, cost: float) -> float:
+        """Record a call whose cost was computed elsewhere (e.g. another vendor's pricing)."""
         self.db.execute(
             "INSERT INTO calls VALUES (?, ?, ?, ?, ?, ?)",
             (datetime.now(timezone.utc).isoformat(), agent, model, input_tokens, output_tokens, cost),

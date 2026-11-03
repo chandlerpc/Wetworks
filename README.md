@@ -5,7 +5,17 @@ Runs 24/7 on the MSI (WSL2 + Docker). See [docs/architecture.md](docs/architectu
 
 ## Status
 
-Milestone 1: The Architect sends morning and evening briefs to Discord, tracks spend against a monthly cap, and reports host health.
+- Milestone 1: The Architect sends morning and evening briefs to Discord, tracks spend against a monthly cap, and reports host health.
+- Milestone 2: cell runtime and the Intel Sleeper, which searches the web for each topic in `config/intel.toml` before every brief.
+
+## Intel topics
+
+Edit `config/intel.toml` to add, change or pause topics. It's re-read on every run, so no rebuild is needed.
+Run Intel on demand:
+
+```
+docker compose exec architect python -m wetworks.main run intel
+```
 
 ## Run on the MSI (Ubuntu in WSL)
 
@@ -61,5 +71,10 @@ wetworks/
   notify.py     Discord webhook (more destinations later)
   health.py     host health snapshot
   architect.py  The Architect: briefs
+  findings.py   shared findings store
+  operators.py  Sleeper Operator (schedules cells)
+  cells/        base Cell + Intel
+config/
+  intel.toml    Intel topics
   main.py       scheduler entry point
 ```
