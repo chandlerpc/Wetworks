@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     intel_lead_minutes: int = 20  # Intel runs this long before each brief
     intel_tier: str = "work"  # Claude tier for Intel when provider = claude
 
+    # Command API / ops console. The console refuses to start without a token.
+    console_token: str = ""
+    console_port: int = 8700
+
     data_dir: Path = Path("/data")
     config_dir: Path = Path("config")
 

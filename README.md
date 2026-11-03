@@ -19,6 +19,25 @@ docker compose up -d --build
 docker compose exec ollama ollama pull gemma4:12b
 ```
 
+## Ops console (phone and desktop)
+
+The Architect serves a private ops console on port 8700: live activity, spend and schedule,
+Intel findings, and two-way comms with clAIr and The Architect. It is only reachable over
+Tailscale and every API call needs the access code from `WETWORKS_CONSOLE_TOKEN`.
+
+Open `http://msi:8700` on any device signed in to your Tailscale, then use your browser's
+"Add to Home Screen" to get an app icon.
+
+All interfaces use the same Command API:
+
+| Endpoint | What it does |
+|---|---|
+| `GET /api/status` | spend, host health, who's working, schedule |
+| `GET /api/events?after=<id>` | activity feed |
+| `GET /api/findings` | latest Intel findings |
+| `GET/POST /api/comms/{clair,architect}` | read / send messages |
+| `POST /api/actions/{intel,brief-morning,brief-evening}` | run something now |
+
 ## Intel topics
 
 Edit `config/intel.toml` to add, change or pause topics. It's re-read on every run, so no rebuild is needed.
@@ -85,6 +104,10 @@ wetworks/
   findings.py   shared findings store
   operators.py  Sleeper Operator (schedules cells)
   cells/        base Cell + Intel
+  events.py     activity log + who's working
+  comms.py      chat with clAIr and The Architect
+  api.py        Command API + console server
+  console/      the ops console (HTML/CSS/JS, no build step)
 config/
   intel.toml    Intel topics
   main.py       scheduler entry point

@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0A0F0B">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Wetworks">
+  <title>Wetworks Ops</title>
+  <link rel="manifest" href="/static/manifest.json">
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/static/icon-180.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/console.css">
+</head>
+<body>
+  <div class="scanlines" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="goggles" role="img" aria-label="Agent status">
+      <span class="lens" data-agent="architect" title="The Architect"></span>
+      <span class="lens" data-agent="clair" title="clAIr"></span>
+      <span class="lens" data-agent="intel" title="Intel"></span>
+    </div>
+    <div class="ident">
+      <h1>Wetworks</h1>
+      <p id="statusline" class="statusline">Connecting…</p>
+    </div>
+    <button id="logout" class="ghost small" type="button" hidden>Lock</button>
+  </header>
+
+  <main id="app" class="panes" hidden>
+    <!-- Ops: what's going on -->
+    <section id="pane-ops" class="pane" aria-labelledby="ops-h">
+      <h2 id="ops-h">Ops</h2>
+
+      <div class="readouts">
+        <div class="readout">
+          <span class="ro-label">Spend this month</span>
+          <span class="ro-value" id="ro-spend">–</span>
+          <div class="meter" aria-hidden="true"><span id="ro-spend-bar"></span></div>
+        </div>
+        <div class="readout">
+          <span class="ro-label">Running on</span>
+          <span class="ro-value" id="ro-model">–</span>
+        </div>
+        <div class="readout">
+          <span class="ro-label">Host</span>
+          <span class="ro-value mono" id="ro-host">–</span>
+        </div>
+      </div>
+
+      <div class="block">
+        <h3>Next up</h3>
+        <ol id="schedule" class="schedule"></ol>
+      </div>
+
+      <div class="block actions">
+        <h3>Send out</h3>
+        <div class="btnrow">
+          <button type="button" data-action="intel">Run Intel sweep</button>
+          <button type="button" class="ghost" data-action="brief-morning">Send morning brief</button>
+          <button type="button" class="ghost" data-action="brief-evening">Send evening brief</button>
+        </div>
+        <p id="action-note" class="note" role="status"></p>
+      </div>
+
+      <div class="block feed-block">
+        <h3>Activity</h3>
+        <ul id="feed" class="feed mono" aria-live="polite"></ul>
+      </div>
+    </section>
+
+    <!-- Comms: talk to clAIr and The Architect -->
+    <section id="pane-comms" class="pane" aria-labelledby="comms-h">
+      <h2 id="comms-h">Comms</h2>
+      <div class="channels" role="tablist" aria-label="Who to talk to">
+        <button role="tab" type="button" class="channel" data-channel="clair" aria-selected="true">clAIr</button>
+        <button role="tab" type="button" class="channel" data-channel="architect" aria-selected="false">The Architect</button>
+      </div>
+      <div id="thread" class="thread" aria-live="polite"></div>
+      <p id="typing" class="typing" hidden></p>
+      <form id="compose" class="compose" autocomplete="off">
+        <label for="msg" class="sr-only">Message</label>
+        <textarea id="msg" rows="1" placeholder="Message clAIr"></textarea>
+        <button type="submit">Send</button>
+      </form>
+    </section>
+
+    <!-- Intel: findings -->
+    <section id="pane-intel" class="pane" aria-labelledby="intel-h">
+      <h2 id="intel-h">Intel</h2>
+      <div id="topic-filter" class="chips" role="group" aria-label="Filter by topic"></div>
+      <ul id="findings" class="findings"></ul>
+    </section>
+  </main>
+
+  <nav id="tabs" class="tabs" hidden aria-label="Sections">
+    <button type="button" data-pane="ops" aria-current="page">Ops</button>
+    <button type="button" data-pane="comms">Comms</button>
+    <button type="button" data-pane="intel">Intel</button>
+  </nav>
+
+  <!-- Access code -->
+  <div id="gate" class="gate">
+    <form id="gate-form" class="gate-card">
+      <div class="goggles big" aria-hidden="true"><span class="lens on"></span><span class="lens on"></span><span class="lens on"></span></div>
+      <h2>Wetworks ops</h2>
+      <p>Enter the access code from your MSI's <span class="mono">.env</span> file.</p>
+      <label for="code" class="sr-only">Access code</label>
+      <input id="code" type="password" autocomplete="current-password" placeholder="Access code" required>
+      <button type="submit">Connect</button>
+      <p id="gate-error" class="error" role="alert"></p>
+    </form>
+  </div>
+
+  <script src="/static/console.js"></script>
+</body>
+</html>

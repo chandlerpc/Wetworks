@@ -1,20 +1,20 @@
 """Entry point.
 
-    python -m wetworks.main                 run the scheduler (default; what Docker runs)
+    python -m wetworks.main                 run everything: scheduler + Command API/console
     python -m wetworks.main brief morning   send one brief now and exit
     python -m wetworks.main run intel       run one cell now and print what it found
 """
 
 import logging
-import signal
 import sys
 
-from apscheduler.schedulers.blocking import BlockingScheduler
+from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from .architect import Architect
 from .cells.base import CellContext
 from .cells.intel import Intel
+from .comms import Comms
 from .config import load_settings
 from .operators import SleeperOperator
 
@@ -28,16 +28,17 @@ def _cron(hhmm: str, tz: str) -> CronTrigger:
 
 def build(settings):
     architect = Architect(settings)
-    ctx = CellContext(settings=settings, llm=architect.llm, findings=architect.findings)
+    ctx = CellContext(settings=settings, llm=architect.llm, findings=architect.findings, events=architect.events)
     intel = Intel(ctx)
     architect.min_importance = int(intel.config.get("intel", {}).get("min_importance_for_brief", 2))
-    return architect, {"intel": intel}
+    comms = Comms(settings.data_dir / "comms.db", architect.llm, architect.events, architect.context_block)
+    return architect, {"intel": intel}, comms
 
 
 def run() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     settings = load_settings()
-    architect, cells = build(settings)
+    architect, cells, comms = build(settings)
 
     if len(sys.argv) >= 3 and sys.argv[1] == "brief":
         architect.brief(sys.argv[2])
@@ -47,7 +48,7 @@ def run() -> None:
             print(f"[{f.topic}] ({f.importance}) {f.title}\n  {f.summary}\n  {f.url}")
         return
 
-    sched = BlockingScheduler(timezone=settings.timezone)
+    sched = BackgroundScheduler(timezone=settings.timezone)
     for kind, hhmm in (("morning", settings.morning_brief), ("evening", settings.evening_brief)):
         sched.add_job(architect.brief, _cron(hhmm, settings.timezone), args=[kind],
                       id=f"{kind}_brief", misfire_grace_time=3600, coalesce=True)
@@ -55,19 +56,34 @@ def run() -> None:
     sleepers = SleeperOperator(sched, settings.timezone)
     sleepers.register(cells["intel"], [settings.morning_brief, settings.evening_brief],
                       lead_minutes=settings.intel_lead_minutes)
+    sched.start()
 
-    signal.signal(signal.SIGTERM, lambda *_: sched.shutdown(wait=False))
     intel = cells["intel"]
     trial = " (2-week trial)" if intel.in_trial() else ""
-    log.info("The Architect is online. Briefs at %s and %s %s (dry_run=%s)",
-             settings.morning_brief, settings.evening_brief, settings.timezone, settings.dry_run)
     source = {"local": f"local {settings.local_model} + SearXNG (free)", "grok": "Grok (paid)",
               "claude": "Claude web search (paid)"}.get(settings.provider, settings.provider)
-    architect.notify.send(
-        f"🟢 The Architect is online. Intel cell active{trial}: {len(intel.topics)} topics via {source}, "
-        f"running {settings.intel_lead_minutes} min before each brief."
-    )
-    sched.start()
+    online = (f"The Architect is online. Intel cell active{trial}: {len(intel.topics)} topics via {source}, "
+              f"running {settings.intel_lead_minutes} min before each brief.")
+    log.info(online)
+    architect.events.add("architect", "info", online)
+    architect.notify.send(f"🟢 {online}")
+
+    if not settings.console_token:
+        log.warning("WETWORKS_CONSOLE_TOKEN is not set, so the console is off. Scheduler still running.")
+        architect.events.add("architect", "warn", "Console is off: set WETWORKS_CONSOLE_TOKEN in .env")
+        import threading
+
+        threading.Event().wait()  # keep the scheduler alive
+
+    import uvicorn
+
+    from .api import create_app
+
+    app = create_app(settings=settings, architect=architect, cells=cells, comms=comms,
+                     events=architect.events, scheduler=sched)
+    log.info("Console listening on port %d", settings.console_port)
+    uvicorn.run(app, host="0.0.0.0", port=settings.console_port, log_level="warning")
+    sched.shutdown(wait=False)
 
 
 if __name__ == "__main__":

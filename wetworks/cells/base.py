@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import date
 
 from ..config import Settings
+from ..events import EventLog
 from ..findings import Finding, FindingsStore
 from ..llm import LLM
 
@@ -15,6 +16,7 @@ class CellContext:
     settings: Settings
     llm: LLM
     findings: FindingsStore
+    events: EventLog | None = None
 
 
 class Cell(ABC):
@@ -37,11 +39,25 @@ class Cell(ABC):
         """Do one pass of the cell's mission and return new findings (already stored)."""
 
     def safe_run(self) -> list[Finding]:
-        """Run without ever crashing the scheduler."""
+        """Run without ever crashing the scheduler. Logs to the activity feed when available."""
+        ev = self.ctx.events
+        if ev is not None:
+            if self.name in ev.busy:
+                self.log.info("%s already running; skipping", self.name)
+                return []
+            ev.busy.add(self.name)
+            ev.add(self.name, "start", f"{self.name.title()} sweep started")
         try:
             found = self.run()
             self.log.info("%s run complete: %d new findings", self.name, len(found))
+            if ev is not None:
+                ev.add(self.name, "done", f"{self.name.title()} sweep done: {len(found)} new findings")
             return found
-        except Exception:
+        except Exception as e:
             self.log.exception("%s run failed", self.name)
+            if ev is not None:
+                ev.add(self.name, "error", f"{self.name.title()} sweep failed: {type(e).__name__}")
             return []
+        finally:
+            if ev is not None:
+                ev.busy.discard(self.name)

@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from .config import Settings
+from .events import EventLog
 from .findings import Finding, FindingsStore
 from .health import format_health, snapshot
 from .ledger import Ledger
@@ -42,6 +43,7 @@ class Architect:
         self.s = settings
         self.ledger = Ledger(settings.data_dir / "ledger.db")
         self.findings = FindingsStore(settings.data_dir / "findings.db")
+        self.events = EventLog(settings.data_dir / "events.db")
         self.llm = LLM(settings, self.ledger)
         self.notify = Notifier(settings.discord_webhook_url, dry_run=settings.dry_run)
         self.tz = ZoneInfo(settings.timezone)
@@ -62,8 +64,30 @@ class Architect:
             lines.append(f"⚠ Budget at {mtd / budget:.0%}. Non-essential calls stop at 100%.")
         return "\n".join(lines)
 
+    def context_block(self, limit: int = 8) -> str:
+        """Status plus the latest findings, for comms replies."""
+        rows = self.findings.db.execute(
+            "SELECT topic, title, summary, importance FROM findings ORDER BY ts DESC LIMIT ?", (limit,)
+        ).fetchall()
+        recent = "\n".join(f"- [{t}] (imp {i}) {ti}: {s}" for t, ti, s, i in rows) or "(none yet)"
+        busy = ", ".join(sorted(self.events.busy)) or "nobody"
+        return f"{self.status_block()}\nWorking right now: {busy}\nLatest Intel findings:\n{recent}"
+
     def brief(self, kind: str) -> str:
         """kind = morning | evening. Builds the brief, sends it, and marks findings reported."""
+        self.events.busy.add("architect")
+        self.events.add("architect", "start", f"Compiling the {kind} brief")
+        try:
+            text = self._brief(kind)
+            self.events.add("architect", "done", f"{kind.title()} brief sent to Discord")
+            return text
+        except Exception as e:
+            self.events.add("architect", "error", f"{kind.title()} brief failed: {type(e).__name__}")
+            raise
+        finally:
+            self.events.busy.discard("architect")
+
+    def _brief(self, kind: str) -> str:
         stamp = datetime.now(self.tz).strftime("%a %b %d, %I:%M %p %Z")
         status = self.status_block()
         findings = self.findings.unreported(self.min_importance)

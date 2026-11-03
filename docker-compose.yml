@@ -6,6 +6,8 @@ services:
     env_file: .env
     environment:
       TZ: America/New_York
+    ports:
+      - "8700:8700"   # ops console + Command API (reach it over Tailscale)
     volumes:
       - wetworks-data:/data
       - ./config:/app/config:ro

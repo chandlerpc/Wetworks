@@ -85,6 +85,18 @@ Other vendors (Gemini, Grok, OpenAI) plug in behind the same `LLM` interface lat
 - Build-phase budget cap: $5/month in `.env.example`. Raise it once everything is proven.
 - Ollama keeps the model loaded in GPU memory permanently (the GPU is dedicated to Wetworks), so runs skip the cold start.
 
+## Milestone 3: Command API and ops console
+
+- One private API (`wetworks/api.py`, port 8700) that every interface uses: the phone console
+  now, the full ops-center UI and clAIr's bridge later.
+- Access: Tailscale only (WSL mirrored networking + a firewall rule limited to port 8700),
+  plus a bearer access code. The API refuses everything when no code is configured.
+- Console: night-vision HUD styling. Tri-lens status light per agent (The Architect, clAIr,
+  Intel) glows while that agent is working. Tabs on phone; three panes side by side on desktop.
+- Comms: clAIr and The Architect each have a persona and answer on the local model with live
+  status and recent findings as context. clAIr runs locally here until the bridge to her
+  Cloudflare Worker is built, at which point this channel is routed to her.
+
 ## Next milestones
 
 1. Revenue cell (Sleeper), fed by Intel's money findings.
