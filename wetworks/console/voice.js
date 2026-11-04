@@ -56,6 +56,8 @@ if (typeof window !== "undefined") (() => {
   let recorder = null, chunks = [], recStart = 0;
   let floor = 0.01, loud = 0, quietSince = 0;
   let holdRec = null;
+  let pressing = false;         // finger is on the mic button right now
+  let warmTimer = null;         // keeps the mic open briefly between presses so first words aren't clipped
 
   const MIME = ["audio/webm;codecs=opus", "audio/mp4", "audio/ogg;codecs=opus", "audio/webm"]
     .find((m) => window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) || "";
@@ -78,6 +80,12 @@ if (typeof window !== "undefined") (() => {
   }
   function decode(buf) {  // promise + callback forms, for older Safari
     return new Promise((ok, bad) => { const p = ctx.decodeAudioData(buf, ok, bad); if (p && p.then) p.then(ok, bad); });
+  }
+  function tick() {  // short "recording now" cue
+    if (!ctx) return;
+    const o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime;
+    o.frequency.value = 1320; g.gain.setValueAtTime(0.12, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+    o.connect(g).connect(ctx.destination); o.start(t); o.stop(t + 0.06);
   }
   function beep(up) {
     if (!ctx) return;
@@ -162,29 +170,50 @@ if (typeof window !== "undefined") (() => {
   }
 
   // ---- Hold to talk ----
+  function warmMic() {  // close the mic a minute after the last press, unless hands-free needs it
+    clearTimeout(warmTimer);
+    warmTimer = setTimeout(() => { if (mode === "off" && !holdRec) closeMic(); }, 60000);
+  }
   async function holdStart(e) {
     e.preventDefault();
-    if (busy || holdRec) return;
+    if (busy || holdRec || pressing) return;
+    pressing = true;
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}  // a small finger slide won't end it
     unlock();
+    $("#mic").classList.add("arming");
+    say("Getting the mic ready…", "");
     try {
       const s = await openMic();
       await wake();
+      if (!pressing) {  // let go before the mic was ready
+        $("#mic").classList.remove("arming");
+        say("Hold the mic until it turns red, then talk.", "warn");
+        warmMic();
+        return;
+      }
+      tick();
       holdRec = record(s);
+      $("#mic").classList.remove("arming");
       $("#mic").classList.add("rec");
-      say("Listening. Let go to send", "rec");
+      say("Recording. Let go to send", "rec");
     } catch {
+      pressing = false;
+      $("#mic").classList.remove("arming");
       say("Microphone blocked. Allow it in your browser settings.", "warn");
     }
   }
   async function holdEnd(e) {
     if (e) e.preventDefault();
+    pressing = false;
     if (!holdRec) return;
     const h = holdRec; holdRec = null;
     $("#mic").classList.remove("rec");
+    // keep recording a beat after release so the last word isn't cut off
+    await new Promise((r) => setTimeout(r, 250));
     h.rec.stop();
     const blob = await h.done;
-    if (mode === "off") closeMic();
-    if (performance.now() - h.started < 400) { say("Hold the button while you talk.", ""); return; }
+    if (mode === "off") warmMic();
+    if (performance.now() - h.started < 600) { say("Hold the mic while you talk.", ""); return; }
     busy = true;
     try {
       const text = await transcribe(blob);
@@ -298,7 +327,7 @@ if (typeof window !== "undefined") (() => {
     if (!ok) return;
     const mic = $("#mic");
     mic.addEventListener("pointerdown", holdStart);
-    ["pointerup", "pointercancel", "pointerleave"].forEach((ev) => mic.addEventListener(ev, holdEnd));
+    ["pointerup", "pointercancel"].forEach((ev) => mic.addEventListener(ev, holdEnd));
     mic.addEventListener("contextmenu", (e) => e.preventDefault());
     $("#handsfree").addEventListener("click", () => (mode === "off" ? handsFreeOn() : handsFreeOff()));
     document.addEventListener("visibilitychange", () => {

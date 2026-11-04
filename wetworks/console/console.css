@@ -178,6 +178,7 @@ input:focus, textarea:focus { border-color: var(--phosphor-dim); outline: none; 
   touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
 }
 .mic:hover { filter: none; border-color: var(--phosphor); }
+.mic.arming { border-color: var(--amber); color: var(--amber); }
 .mic.rec { background: var(--signal); color: var(--night); border-color: var(--signal); box-shadow: 0 0 0 6px rgba(255, 77, 61, 0.18); }
 .thread { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
   padding: var(--s4) 2px; display: flex; flex-direction: column; gap: var(--s3); }
