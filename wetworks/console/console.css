@@ -219,6 +219,10 @@ input:focus, textarea:focus { border-color: var(--phosphor-dim); outline: none; 
 
 /* ---- Missions -------------------------------------------------------- */
 .new-mission { display: grid; gap: var(--s2); }
+.kinds { display: flex; gap: var(--s1); padding: 3px; border: 1px solid var(--seam); border-radius: 8px; background: #070A08; width: max-content; }
+.kind { background: transparent; color: var(--fog); border-color: transparent; min-height: 34px; padding: 6px 12px; font-size: 14px; }
+.kind[aria-checked="true"] { background: var(--hull); color: var(--paper); border-color: var(--seam); }
+.kind:hover { filter: none; color: var(--paper); }
 .new-mission textarea { resize: vertical; min-height: 64px; }
 .new-mission button { justify-self: start; }
 .missions { list-style: none; margin: var(--s4) 0 0; padding: 0; }

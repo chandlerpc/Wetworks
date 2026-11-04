@@ -38,7 +38,10 @@ REPLY_FORMAT = """Reply with ONLY this JSON object:
 If Patrick is asking for real work to be done (research something, find options, draft or write
 something, make a plan, compare things), open a mission instead of doing it in chat:
 {"reply": "short confirmation", "mission": {"title": "short title, under 8 words",
- "request": "the full task, in enough detail for an operative who hasn't seen this chat"}}
+ "request": "the full task, in enough detail for an operative who hasn't seen this chat",
+ "kind": "research" or "code"}}
+Use kind "code" only when Patrick asks to change Wetworks' own code (fix a bug, add a feature, change
+how the console or an agent works); code missions open a pull request for him to review.
 Only open a mission for a new request; don't reopen one that's already queued or running.
 Small talk, questions about status, and quick answers you can give from the status above are not missions."""
 
@@ -157,8 +160,10 @@ class Comms:
                                              max_tokens=700)
                     text, mission = parse_reply(reply.text) if json_mode else (reply.text.strip(), None)
                 if mission and self.open_mission:
-                    m = self.open_mission(str(mission.get("title", "")), str(mission["request"]), channel)
-                    text = (text or "On it.") + f"\n\nMission #{m['id']} opened: {m['title']}. Track it in Missions."
+                    kind = "code" if str(mission.get("kind", "")).lower() == "code" else "research"
+                    m = self.open_mission(str(mission.get("title", "")), str(mission["request"]), channel, kind)
+                    label = "Code mission" if kind == "code" else "Mission"
+                    text = (text or "On it.") + f"\n\n{label} #{m['id']} opened: {m['title']}. Track it in Missions."
                 text = text or "I came back empty on that one. Try asking again, or rephrase it."
             except Exception as e:
                 text = f"Comms down: {type(e).__name__}. The local model may still be loading; try again in a minute."

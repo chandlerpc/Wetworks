@@ -54,6 +54,17 @@ Say "That's all, Clair" (or stay quiet for 90 seconds) to end. She answers in an
 (Azure `en-IE-EmilyNeural`). Set `AZURE_SPEECH_KEY` and `AZURE_SPEECH_REGION` in `.env`;
 without them she still hears you and replies in text.
 
+## Code missions
+
+Choose **Code** in Missions (or ask C.L.a.i.R / The Architect to change Wetworks). A Splinter team
+works on a fresh branch, runs the tests in an offline sandbox, and opens a pull request for you to
+review. It never pushes to main and can't edit workflows, `.env` files or keys. Needs `GITHUB_TOKEN`
+(fine-grained, this repo only: Contents and Pull requests read/write).
+
+```
+docker compose exec architect python -m wetworks.main code "Add a footer to the console showing the version"
+```
+
 ## Intel topics
 
 Edit `config/intel.toml` to add, change or pause topics. It's re-read on every run, so no rebuild is needed.
@@ -125,6 +136,8 @@ wetworks/
   missions.py   mission queue
   api.py        Command API + console server
   console/      the ops console (HTML/CSS/JS, no build step)
+  code/         Code cell: git workspace + pull requests, coding brains
+sandbox/        offline test sandbox for code missions
 config/
   intel.toml    Intel topics
   main.py       scheduler entry point

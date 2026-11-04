@@ -79,6 +79,10 @@
     <section id="pane-missions" class="pane" aria-labelledby="missions-h">
       <h2 id="missions-h">Missions</h2>
       <form id="new-mission" class="new-mission" autocomplete="off">
+        <div class="kinds" role="radiogroup" aria-label="Mission type">
+          <button type="button" class="kind" role="radio" data-kind="research" aria-checked="true">Research</button>
+          <button type="button" class="kind" role="radio" data-kind="code" aria-checked="false">Code</button>
+        </div>
         <label for="mission-text" class="sr-only">What should the Splinter team do?</label>
         <textarea id="mission-text" rows="3" placeholder="What should a Splinter team do? For example: find three Orlando clinics that might pay for AI intake automation"></textarea>
         <button type="submit">Start mission</button>

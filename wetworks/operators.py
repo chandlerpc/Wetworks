@@ -44,9 +44,10 @@ class SleeperOperator:
 class SplinterOperator:
     """Runs missions from the queue, one at a time (the GPU runs one model job well at a time)."""
 
-    def __init__(self, store, splinter, events=None, notify=None, on_done=None):
+    def __init__(self, store, splinter, events=None, notify=None, on_done=None, runners: dict | None = None):
         self.store = store
         self.splinter = splinter
+        self.runners = {"research": splinter, **(runners or {})}
         self.events = events
         self.notify = notify
         self.on_done = on_done  # callback(mission) e.g. post into the comms channel that asked
@@ -81,7 +82,10 @@ class SplinterOperator:
             self.events.busy.add("splinter")
             self.events.add("splinter", "start", f"Mission #{mid} started: {m['title']}")
         try:
-            result = self.splinter.run(m)
+            runner = self.runners.get(m.get("kind", "research"))
+            if runner is None:
+                raise RuntimeError(f"No team for {m.get('kind')} missions yet")
+            result = runner.run(m)
             self.store.set_status(mid, "done", result=result.text, sources=result.sources)
             if self.events:
                 self.events.add("splinter", "done", f"Mission #{mid} done: {m['title']}")

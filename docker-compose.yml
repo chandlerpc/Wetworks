@@ -10,11 +10,16 @@ services:
       - "8700:8700"   # ops console + Command API (reach it over Tailscale)
     volumes:
       - wetworks-data:/data
+      - sandbox-runs:/data/sandbox-runs
       - ./config:/app/config:ro
+    networks:
+      - default
+      - sandbox
     depends_on:
       - ollama
       - searxng
       - whisper
+      - sandbox
     logging: &logging
       driver: json-file
       options:
@@ -52,6 +57,29 @@ services:
       - whisper-models:/root/.cache
     logging: *logging
 
+  # Test sandbox for code missions: no secrets, no internet (internal network only),
+  # read-only system, no extra privileges, capped memory and processes.
+  sandbox:
+    build:
+      context: .
+      dockerfile: sandbox/Dockerfile
+    container_name: wetworks-sandbox
+    restart: unless-stopped
+    networks:
+      - sandbox
+    volumes:
+      - sandbox-runs:/runs
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 2g
+    pids_limit: 256
+    logging: *logging
+
   # Free self-hosted web search
   searxng:
     image: searxng/searxng:latest
@@ -63,7 +91,13 @@ services:
       SEARXNG_SECRET: ${SEARXNG_SECRET:-wetworks-local-only}
     logging: *logging
 
+networks:
+  default: {}
+  sandbox:
+    internal: true   # no route to the internet
+
 volumes:
   wetworks-data:
+  sandbox-runs:
   ollama-models:
   whisper-models:

@@ -3,7 +3,8 @@
     python -m wetworks.main                 run everything: scheduler + Command API/console
     python -m wetworks.main brief morning   send one brief now and exit
     python -m wetworks.main run intel       run one cell now and print what it found
-    python -m wetworks.main mission <text>  run one mission now and print the result
+    python -m wetworks.main mission <text>  run one research mission now and print the result
+    python -m wetworks.main code <text>     run one code mission now (opens a pull request)
 """
 
 import logging
@@ -16,7 +17,10 @@ from .architect import Architect
 from .bridge import ClairBridge
 from .cells.base import CellContext
 from .cells.intel import Intel
+from .cells.coder import Coder
 from .cells.splinter import Splinter
+from .code.brain import make_brain
+from .code.workspace import Workspace
 from .comms import Comms
 from .config import load_settings
 from .missions import MissionStore
@@ -37,11 +41,17 @@ def build(settings):
     intel = Intel(ctx)
     architect.min_importance = int(intel.config.get("intel", {}).get("min_importance_for_brief", 2))
     missions = MissionStore(settings.data_dir / "missions.db")
-    operator = SplinterOperator(missions, Splinter(ctx, missions), events=architect.events, notify=architect.notify)
+    coder = Coder(ctx, missions,
+                  Workspace(settings.data_dir / "workspaces", settings.code_repo, token=settings.github_token),
+                  make_brain(settings.code_brain, architect.llm, settings.code_max_files),
+                  runs_dir=settings.data_dir / "sandbox-runs", sandbox_url=settings.sandbox_url,
+                  repair_rounds=settings.code_repair_rounds)
+    operator = SplinterOperator(missions, Splinter(ctx, missions), events=architect.events, notify=architect.notify,
+                                runners={"code": coder})
 
-    def open_mission(title: str, request: str, source: str) -> dict:
-        m = missions.create(title, request, source=source)
-        architect.events.add("splinter", "info", f"Mission #{m['id']} queued: {m['title']}")
+    def open_mission(title: str, request: str, source: str, kind: str = "research") -> dict:
+        m = missions.create(title, request, source=source, kind=kind)
+        architect.events.add("splinter", "info", f"{'Code m' if m['kind'] == 'code' else 'M'}ission #{m['id']} queued: {m['title']}")
         operator.submit()
         return m
 
@@ -61,8 +71,9 @@ def run() -> None:
     if len(sys.argv) >= 3 and sys.argv[1] == "brief":
         architect.brief(sys.argv[2])
         return
-    if len(sys.argv) >= 3 and sys.argv[1] == "mission":
-        m = comms.open_mission_fn("", " ".join(sys.argv[2:]), "console")
+    if len(sys.argv) >= 3 and sys.argv[1] in ("mission", "code"):
+        kind = "code" if sys.argv[1] == "code" else "research"
+        m = comms.open_mission_fn("", " ".join(sys.argv[2:]), "console", kind)
         done = comms.operator.run_one(comms.missions.get(m["id"]))
         print(f"Mission #{done['id']} {done['status']}: {done['title']}\n\n{done['result']}")
         for s in done["sources"]:

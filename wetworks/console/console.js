@@ -247,7 +247,8 @@
       const li = el("li");
       const b = el("button", "mission");
       b.type = "button";
-      b.append(el("span", `status-line ${m.status}`, `#${m.id} · ${STATUS[m.status] || m.status}${m.source && m.source !== "console" ? ` · via ${NAMES[m.source] || m.source}` : ""}`));
+      const kindTag = m.kind === "code" ? " · Code" : "";
+      b.append(el("span", `status-line ${m.status}`, `#${m.id} · ${STATUS[m.status] || m.status}${kindTag}${m.source && m.source !== "console" ? ` · via ${NAMES[m.source] || m.source}` : ""}`));
       b.append(el("span", "m-title", m.title), el("span", "m-when", ago(m.updated)));
       if (m.result_preview && m.status === "done") {
         const plain = m.result_preview.replace(/^#+\s*/gm, "").replace(/^[-*•]\s+/gm, "").replace(/\*\*/g, "").replace(/\s*\[\d+\]/g, "").replace(/\s+/g, " ").trim();
@@ -318,6 +319,17 @@
     if (!d.open) d.showModal();
   }
 
+  let missionKind = "research";
+  const KIND_HINT = {
+    research: "What should a Splinter team do? For example: find three Orlando clinics that might pay for AI intake automation",
+    code: "What should change in Wetworks? For example: add a button on Ops that runs the morning brief. You'll get a pull request to review.",
+  };
+  function setKind(k) {
+    missionKind = k;
+    $$(".kind").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.kind === k)));
+    $("#mission-text").placeholder = KIND_HINT[k];
+  }
+
   async function startMission(e) {
     e.preventDefault();
     const box = $("#mission-text");
@@ -326,7 +338,7 @@
     const btn = $("#new-mission button");
     btn.disabled = true;
     try {
-      const m = await api("/api/missions", { method: "POST", body: JSON.stringify({ request }) });
+      const m = await api("/api/missions", { method: "POST", body: JSON.stringify({ request, kind: missionKind }) });
       box.value = "";
       await loadMissions();
       showMission(m.id);
@@ -425,6 +437,7 @@
   $$(".tabs button").forEach((b) => b.addEventListener("click", () => showPane(b.dataset.pane)));
   $$("[data-action]").forEach((b) => b.addEventListener("click", () => runAction(b)));
   $("#new-mission").addEventListener("submit", startMission);
+  $$(".kind").forEach((b) => b.addEventListener("click", () => setKind(b.dataset.kind)));
   $("#ms-close").addEventListener("click", () => $("#mission-sheet").close());
   $("#mission-sheet").addEventListener("close", () => { openMission = null; });
   $("#mission-sheet").addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });

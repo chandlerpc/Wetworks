@@ -187,7 +187,8 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
             return JSONResponse({"error": "Missions aren't available."}, status_code=503)
         try:
             body = await request.json()
-            m = open_mission(str(body.get("title", "")), str(body.get("request", "")), "console")
+            kind = "code" if body.get("kind") == "code" else "research"
+            m = open_mission(str(body.get("title", "")), str(body.get("request", "")), "console", kind)
         except ValueError:
             return JSONResponse({"error": "Describe what the mission should do."}, status_code=400)
         return JSONResponse(m, status_code=202)

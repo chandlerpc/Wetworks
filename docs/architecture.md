@@ -136,9 +136,27 @@ Other vendors (Gemini, Grok, OpenAI) plug in behind the same `LLM` interface lat
 - Limit: browsers only allow the microphone while the console is on screen. Always-on
   "Hey Clair" with the screen locked needs a native app.
 
+## Milestone 7: Code cell (framework)
+
+- Code missions (kind `code`) run in `wetworks/cells/coder.py`: fresh branch
+  `wetworks/mission-<id>` from main → brain picks files and proposes full-file edits → edits are
+  staged → a copy of the files (no `.git`) runs its tests in the sandbox → one repair round →
+  commit only the staged files → push the branch → open a pull request (draft if tests fail).
+  Nothing merges automatically.
+- Safety:
+  - never pushes to main; blocks `.git/`, `.github/` (workflows run on push with repo secrets),
+    `.env*` (except `.env.example`), keys and certificates;
+  - git hooks and fsmonitor are always disabled; the GitHub token is sent as a per-command
+    header and never written into the clone;
+  - the `sandbox` container has no secrets, sits on an internal-only Docker network (no internet),
+    runs read-only with no extra privileges, capped memory and processes, and only sees a copy.
+- Brains (`wetworks/code/brain.py`): `local` (free, weak at coding) and `claude-api` (paid,
+  inside the monthly cap). Friday: `claude-code` on the Max plan.
+- Chat: clAIr and The Architect can open code missions; the console has a Research / Code switch.
+
 ## Next milestones
 
-1. Code cell, so Wetworks can work on its own repo (needed for "build itself").
+1. Claude Code brain on the Max plan (Friday).
 2. Revenue cell (Sleeper), fed by Intel's money findings.
 3. C.L.a.i.R bridge: The Architect ↔ Cloudflare Worker.
 4. The Forge: local model container with GPU.

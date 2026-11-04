@@ -63,6 +63,14 @@ class Settings(BaseSettings):
     stop_phrases: str = "that's all clair|goodbye clair|that's all|goodbye"
     voice_idle_seconds: int = 90
 
+    # Code cell. Works on code_repo through pull requests only; tests run in the sandbox.
+    github_token: str = ""
+    code_repo: str = "chandlerpc/Wetworks"
+    code_brain: str = "local"   # local (free) | claude-api (paid, budget-capped); claude-code from Friday
+    code_max_files: int = 6
+    code_repair_rounds: int = 1
+    sandbox_url: str = "http://sandbox:8800"
+
     # Command API / ops console. The console refuses to start without a token.
     console_token: str = ""
     console_port: int = 8700
@@ -86,6 +94,9 @@ def load_settings() -> Settings:
     s.azure_speech_key = tidy(s.azure_speech_key)
     s.azure_speech_region = tidy(s.azure_speech_region).replace(" ", "").lower()
     s.clair_token = tidy(s.clair_token)
+    if not s.github_token:
+        s.github_token = os.environ.get("GITHUB_TOKEN", "")
+    s.github_token = tidy(s.github_token)
     if not s.xai_api_key:
         s.xai_api_key = os.environ.get("XAI_API_KEY", "")
     return s

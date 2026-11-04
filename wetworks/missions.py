@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 STATUSES = ("queued", "running", "done", "failed", "cancelled")
+KINDS = ("research", "code")
 
 
 def _now() -> str:
@@ -32,25 +33,29 @@ class MissionStore:
                 sources TEXT NOT NULL DEFAULT '[]'
             )"""
         )
+        cols = [r[1] for r in self.db.execute("PRAGMA table_info(missions)")]
+        if "kind" not in cols:  # added with the Code cell
+            self.db.execute("ALTER TABLE missions ADD COLUMN kind TEXT NOT NULL DEFAULT 'research'")
         self.db.commit()
         self.cancel_requested: set[int] = set()
 
     def _row(self, r) -> dict:
-        keys = ("id", "created", "updated", "source", "title", "request", "status", "steps", "result", "sources")
+        keys = ("id", "created", "updated", "source", "title", "request", "status", "steps", "result", "sources", "kind")
         d = dict(zip(keys, r))
         d["steps"] = json.loads(d["steps"])
         d["sources"] = json.loads(d["sources"])
         return d
 
-    def create(self, title: str, request: str, source: str = "console") -> dict:
+    def create(self, title: str, request: str, source: str = "console", kind: str = "research") -> dict:
+        kind = kind if kind in KINDS else "research"
         title = (title or request).strip()[:120]
         request = request.strip()[:4000]
         if not request:
             raise ValueError("A mission needs a request.")
         with self.lock:
             cur = self.db.execute(
-                "INSERT INTO missions (created, updated, source, title, request, status) VALUES (?, ?, ?, ?, ?, 'queued')",
-                (_now(), _now(), source, title, request),
+                "INSERT INTO missions (created, updated, source, title, request, status, kind) VALUES (?, ?, ?, ?, ?, 'queued', ?)",
+                (_now(), _now(), source, title, request, kind),
             )
             self.db.commit()
             mid = cur.lastrowid

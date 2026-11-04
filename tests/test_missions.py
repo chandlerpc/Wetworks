@@ -132,7 +132,7 @@ def test_chat_opens_mission_and_reports_back(tmp_path):
     ev = EventLog(tmp_path / "e.db")
     opened = []
 
-    def open_mission(title, request, source):
+    def open_mission(title, request, source, kind="research"):
         opened.append((title, request, source))
         return {"id": 7, "title": title}
 
@@ -201,7 +201,7 @@ def test_clair_goes_through_bridge_and_can_open_missions(tmp_path):
     opened = []
     bridge = FakeBridge(reply=("Passing it on.", {"title": "Leads", "request": "find leads"}))
     comms = Comms(tmp_path / "c.db", llm, ev, lambda: "spend $0.43",
-                  open_mission=lambda t, r, s: opened.append((t, r, s)) or {"id": 4, "title": t}, bridge=bridge)
+                  open_mission=lambda t, r, s, k="research": opened.append((t, r, s)) or {"id": 4, "title": t}, bridge=bridge)
     comms.post("clair", "find me leads", wait=True)
     history, context = bridge.calls[0]
     assert history[-1] == {**history[-1], "sender": "patrick", "text": "find me leads"} and context == "spend $0.43"
