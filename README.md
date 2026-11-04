@@ -125,6 +125,28 @@ a ticket (patient details are stripped automatically, but leave names out when y
 Technician drafts the likely cause, steps, questions and a reply, using your own notes first. Add KB
 articles or notes with **Add file**; when you mark a ticket solved, what fixed it is saved for next time.
 
+## The Observer
+
+Learns how your day works on your own Mac and the MSI and suggests how Wetworks can fit around it.
+Never run it on a work computer. Put the console access code in `~/.wetworks-observer` on each machine,
+then start the helper when you want it watching (Ctrl+C stops it; Pause in the console works too).
+
+On the Mac, from your Wetworks folder (macOS will ask to allow Terminal under Accessibility and
+Screen Recording):
+
+```
+python3 observer/agent.py --server https://YOUR-MSI.ts.net --device mac
+```
+
+On the MSI, in Ubuntu:
+
+```
+python3 observer/agent.py --server http://localhost:8700 --device msi
+```
+
+What it records and what it never records is set in `config/observer.toml`. Ideas it has (brief times,
+a morning prep, automations) arrive as approval cards; nothing changes without your OK.
+
 ## The Forge (training)
 
 The Forge learns from lessons: decisions Gemini (and Claude, later) made while driving the agents.

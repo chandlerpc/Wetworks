@@ -1,0 +1,31 @@
+# The Observer: learns how your day works from your Mac and the MSI, on your own machines only.
+# Never install the helper on a Novarad / work-managed computer. Everything stays on the MSI and is
+# only read by the local model. Edit freely; the helper picks changes up within a minute.
+
+[observer]
+enabled = true
+
+# A screenshot every N seconds while you're active. The local model writes one sentence about it and
+# the image is deleted straight away; only the sentence is kept.
+screenshots = true
+screenshot_every_seconds = 60
+
+# No samples or screenshots after this many seconds without keyboard or mouse.
+idle_after_seconds = 300
+
+# Raw activity is deleted after this many days; daily digests are kept.
+keep_days = 14
+
+# What the morning brief (and Discord) may say: "summary" = hours active and focus blocks only, "off".
+brief = "summary"
+
+# Never record these apps: time is counted as "Private" with no title and no screenshot.
+exclude_apps = ["1Password", "Keychain Access", "Bitwarden", "KeePass", "KeePassXC", "Messages", "FaceTime",
+                "Signal", "WhatsApp", "Telegram", "Photos", "Wallet"]
+
+# Same for any window whose title contains one of these (case-insensitive). Work and patient screens,
+# money, passwords and private browsing are all excluded.
+exclude_title_words = ["novarad", "novapacs", "nova ris", "pacs", "patient", "mychart", "epic hyperspace",
+                       "bank", "chase", "amex", "american express", "capital one", "paypal", "venmo", "credit karma",
+                       "password", "sign in", "log in", "login", "incognito", "inprivate", "private browsing",
+                       "private window"]

@@ -24,7 +24,7 @@ def _iso(dt):
 
 
 def floor_state(*, settings, architect, comms, events, scheduler=None, missions=None, approvals=None, forge=None,
-                leads=None, halt=None, finance=None, dayjob=None) -> dict:
+                leads=None, halt=None, finance=None, dayjob=None, observer=None) -> dict:
     busy = set(events.busy)
     since = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
     recent = events.recent(limit=60)
@@ -95,6 +95,14 @@ def floor_state(*, settings, architect, comms, events, scheduler=None, missions=
                        "state": state("dayjob", sleeper=True), "vendor": "local", "model": local,
                        "next": _iso(nxt.get("dayjob")), "last": last("dayjob"),
                        "support": {"open": c.get("open", 0) + c.get("waiting", 0), "fixes": c.get("fixes", 0), "docs": c.get("docs", 0)}})
+
+    if observer is not None:
+        devs = observer.devices()
+        watching = any(d["live"] for d in devs) and not observer.paused()
+        agents.append({"id": "observer", "name": "The Observer", "role": "Learns your day", "room": "archives", "kind": "sleeper",
+                       "state": "blocked" if "observer" in errored else ("working" if watching else "idle"),
+                       "vendor": "local", "model": local, "last": last("observer"),
+                       "watch": {"devices": [d["name"] for d in devs if d["live"]], "paused": observer.paused()}})
 
     forge_info = {}
     if forge is not None:

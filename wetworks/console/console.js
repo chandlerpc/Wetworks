@@ -783,6 +783,92 @@
     });
   }
 
+  // ---- The Observer (local only) ---------------------------------------
+  let obsRec = null;
+  async function loadObserver() {
+    const o = await api("/api/observer");
+    const live = o.devices.filter((d) => d.live);
+    $("#obs-devices").textContent = o.paused ? "Paused. Nothing is being recorded."
+      : live.length ? `Watching: ${live.map((d) => d.name).join(", ")}` : (o.devices.length ? "No helper running right now." : "No computers connected yet.");
+    $("#obs-pause").textContent = o.paused ? "Resume" : "Pause";
+    $("#obs-pause").dataset.paused = o.paused ? "1" : "";
+    $("#obs-setup").open = !o.devices.length;
+    const sel = $("#obs-device"), keep = sel.value; sel.replaceChildren();
+    o.devices.forEach((d) => { const op = el("option", null, `${d.name}${d.live ? "" : " (off)"}`); op.value = d.name; sel.append(op); });
+    if (keep) sel.value = keep;
+    const t = o.today, box = $("#obs-today"); box.replaceChildren();
+    if (!t.active_minutes) box.append(el("p", "note", "Nothing recorded today yet."));
+    else {
+      const head = el("div", "fin-totals");
+      const a = el("div"); a.append(el("span", "fh-label", "Active today"), el("strong", "fin-big", `${(t.active_minutes / 60).toFixed(1)}h`));
+      const b = el("div"); b.append(el("span", "fh-label", "Focus blocks · switches"), el("strong", "fin-big", `${t.focus_blocks.length} · ${t.switches}`));
+      head.append(a, b); box.append(head);
+      box.append(el("p", "note", `${t.first} to ${t.last}` + (o.patterns.usual_start ? ` · you usually start ${o.patterns.usual_start}, finish ${o.patterns.usual_end}` : "")));
+      const max = Math.max(...t.apps.map((x) => x.minutes), 1);
+      t.apps.slice(0, 8).forEach((x) => {
+        const row = el("div", "fin-cat"); row.append(el("span", null, x.app), el("span", "mono", `${x.minutes} min`));
+        const bar = el("div", "meter"); const f = el("span"); f.style.width = `${(x.minutes / max) * 100}%`; bar.append(f); row.append(bar);
+        box.append(row);
+      });
+      if (t.screens.length) {
+        box.append(el("h4", "obs-h4", "On your screen"));
+        const ul = el("ul", "fin-list obs-screens");
+        t.screens.slice(-8).reverse().forEach((x) => { const li = el("li"); li.append(el("span", "mono", x.time), el("span", null, x.what)); ul.append(li); });
+        box.append(ul);
+      }
+    }
+    if (o.patterns.morning_routine.length) box.append(el("p", "note", `Your mornings usually start with ${o.patterns.morning_routine.join(" → ")}.`));
+    obsRec = o.recordings.find((r) => r.status === "recording") || null;
+    $("#obs-rec-btn").textContent = obsRec ? "Stop" : "Record";
+    $("#obs-task").disabled = !!obsRec;
+    if (obsRec) $("#obs-note").textContent = `Recording “${obsRec.name}” on ${obsRec.device}: ${obsRec.steps.length} steps so far. Do the task, then Stop.`;
+    const rl = $("#obs-recordings"); rl.replaceChildren();
+    o.recordings.filter((r) => r.status !== "recording").forEach((r) => {
+      const li = el("li", "dj-ticket"); const det = el("details");
+      det.append(el("summary", null, `${r.name} · ${r.device} · ${r.steps.length} steps${r.status === "ready" ? "" : " · writing playbook…"}`));
+      if (r.playbook) {
+        det.append(el("div", "draft", r.playbook));
+        const go = el("button", "small", "Automate this"); go.type = "button";
+        go.addEventListener("click", async () => { go.disabled = true; try { const m = await api(`/api/observer/recordings/${r.id}/mission`, { method: "POST", body: "{}" }); go.textContent = `Mission #${m.id} opened`; } catch (err) { go.textContent = err.message; } });
+        det.append(go);
+      }
+      li.append(det); rl.append(li);
+    });
+    if (!o.recordings.length) rl.append(el("li", "note", "Press Record, do something once, press Stop: The Observer writes a playbook your agents can follow."));
+    const dl = $("#obs-digests"); dl.replaceChildren();
+    o.digests.forEach((d) => { const li = el("li", "obs-digest"); li.append(el("span", "mono", d.day.slice(5)), el("span", null, d.text)); dl.append(li); });
+    if (!o.digests.length) dl.append(el("li", "note", "The first digest arrives tonight after 11 PM."));
+  }
+  function bindObserver() {
+    $("#obs-pause").addEventListener("click", async (e) => {
+      await api("/api/observer/pause", { method: "POST", body: JSON.stringify({ paused: !e.currentTarget.dataset.paused }) });
+      safe(loadObserver)();
+    });
+    $("#obs-teach").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const note = $("#obs-note");
+      try {
+        if (obsRec) {
+          await api(`/api/observer/recordings/${obsRec.id}/stop`, { method: "POST", body: "{}" });
+          note.textContent = "Stopped. The Observer is writing the playbook.";
+        } else {
+          const device = $("#obs-device").value;
+          if (!device) throw new Error("Start the helper on a computer first.");
+          const r = await api("/api/observer/recordings", { method: "POST", body: JSON.stringify({ device, name: $("#obs-task").value }) });
+          note.textContent = `Recording “${r.name}” on ${device}. It starts within 15 seconds.`;
+          $("#obs-task").value = "";
+        }
+        safe(loadObserver)();
+      } catch (err) { note.textContent = err.message; }
+    });
+    $$("[data-forget]").forEach((b) => b.addEventListener("click", async () => {
+      const all = b.dataset.forget === "all";
+      if (all && !confirm("Delete all recorded activity and digests?")) return;
+      const r = await api("/api/observer/forget", { method: "POST", body: JSON.stringify({ what: b.dataset.forget }) });
+      $("#obs-note").textContent = `Deleted ${r.deleted} records.`; safe(loadObserver)();
+    }));
+  }
+
   // ---- Actions --------------------------------------------------------
   async function runAction(btn) {
     const note = $("#action-note");
@@ -805,7 +891,10 @@
   // ---- Navigation -----------------------------------------------------
   function showPane(name) {
     $$(".pane").forEach((p) => p.classList.toggle("active", p.id === `pane-${name}`));
-    $$(".tabs button").forEach((b) => { if (b.dataset.pane === name) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
+    $$(".tabs button").forEach((b) => {
+      if (b.dataset.pane === name) { b.setAttribute("aria-current", "page"); b.scrollIntoView({ block: "nearest", inline: "nearest" }); }
+      else b.removeAttribute("aria-current");
+    });
     store.set("wetworks.pane", name);
     if (name === "comms") { stick = true; setTopbarHeight(); requestAnimationFrame(toBottom); }
   }
@@ -836,9 +925,9 @@
     showPane(store.get("wetworks.pane") || "ops");
     selectChannel(channel);
     const s = safe(loadStatus), ev = safe(loadEvents), m = safe(loadMessages), f = safe(loadFindings), mi = safe(loadMissions), le = safe(loadLeads);
-    s(); ev(); f(); mi(); le(); safe(loadMemory)(); safe(loadFinance)(); safe(loadDayJob)();
+    s(); ev(); f(); mi(); le(); safe(loadMemory)(); safe(loadFinance)(); safe(loadDayJob)(); safe(loadObserver)();
     const ap = safe(loadApprovals); ap(); timers.push(setInterval(ap, 10000));
-    timers.push(setInterval(le, 30000), setInterval(safe(loadFinance), 60000), setInterval(safe(loadDayJob), 30000));
+    timers.push(setInterval(le, 30000), setInterval(safe(loadFinance), 60000), setInterval(safe(loadDayJob), 30000), setInterval(safe(loadObserver), 20000));
     if (window.WWVoice) window.WWVoice.init();
     if (window.WWFloor) {
       window.WWFloor.toTactical = (pane, channel, missionId) => {
@@ -913,6 +1002,7 @@
   $("#fin-import").addEventListener("submit", (e) => e.preventDefault());
   bindFinance();
   bindDayJob();
+  bindObserver();
   $("#mem-search").addEventListener("submit", (e) => { e.preventDefault(); safe(loadMemory)(); });
   let memT = null;
   $("#mem-q").addEventListener("input", () => { clearTimeout(memT); memT = setTimeout(() => safe(loadMemory)(), 300); });

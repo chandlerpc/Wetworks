@@ -56,7 +56,7 @@ def _iso(dt) -> str | None:
 
 def create_app(*, settings, architect, cells: dict, comms, events, scheduler=None,
                missions=None, open_mission=None, voice=None, leads=None, memory=None, approvals=None,
-               commander=None, forge=None, halt=None, finance=None, dayjob=None) -> Starlette:
+               commander=None, forge=None, halt=None, finance=None, dayjob=None, observer=None) -> Starlette:
     def run_bg(fn):
         threading.Thread(target=fn, daemon=True).start()
 
@@ -430,6 +430,90 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
         return JSONResponse({"results": [{k: h[k] for k in ("kind", "ref", "title", "snippet")} for h in dayjob.search(q, 12)]
                              if dayjob is not None else []})
 
+    # ---- The Observer (local only) ---------------------------------------------------------------
+    def _obs_off():
+        return JSONResponse({"error": "The Observer isn't set up."}, status_code=503)
+
+    async def observer_overview(request: Request):
+        if observer is None:
+            return _obs_off()
+        from datetime import date as _date
+
+        day = request.query_params.get("date")
+        d = await run_in_threadpool(observer.day, _date.fromisoformat(day) if day else None)
+        return JSONResponse({"devices": observer.devices(), "paused": observer.paused(), "config": observer.helper_config(""),
+                             "today": d, "patterns": observer.patterns(), "digests": observer.digests(7),
+                             "recordings": observer.recordings(10)})
+
+    async def observer_helper(request: Request):
+        if observer is None:
+            return _obs_off()
+        return JSONResponse(observer.helper_config(request.query_params.get("device", "")))
+
+    async def observer_samples(request: Request):
+        if observer is None:
+            return _obs_off()
+        b = await request.json()
+        n = await run_in_threadpool(observer.add_samples, str(b.get("device", "")), str(b.get("platform", "")), b.get("samples") or [])
+        return JSONResponse({"stored": n, **observer.helper_config(str(b.get("device", "")))})
+
+    async def observer_shot(request: Request):
+        if observer is None or "observer" not in cells:
+            return _obs_off()
+        q = request.query_params
+        img = await request.body()
+        if not img or len(img) > 6_000_000:
+            return JSONResponse({"error": "Send one JPEG or PNG under 6 MB."}, status_code=400)
+        if observer.paused():
+            return JSONResponse({"ok": False, "paused": True})
+        cell = cells["observer"]
+        run_bg(lambda: cell.describe(img, q.get("device", ""), q.get("app", ""), q.get("title", ""), int(q.get("recording", 0) or 0)))
+        return JSONResponse({"ok": True}, status_code=202)  # the image is never written to disk
+
+    async def observer_pause(request: Request):
+        if observer is None:
+            return _obs_off()
+        b = await request.json()
+        observer.set_paused(bool(b.get("paused")))
+        events.add("observer", "info", "Observer paused" if b.get("paused") else "Observer watching again")
+        return JSONResponse({"paused": observer.paused()})
+
+    async def observer_record(request: Request):
+        if observer is None:
+            return _obs_off()
+        rid = request.path_params.get("rid")
+        if rid is None:
+            b = await request.json()
+            device = str(b.get("device", "")).strip()
+            if not device:
+                return JSONResponse({"error": "Pick which computer to record."}, status_code=400)
+            r = observer.start_recording(device, str(b.get("name", "")))
+            events.add("observer", "start", f"Recording “{r['name']}” on {device}")
+            return JSONResponse(r)
+        rid, action = int(rid), request.path_params["action"]
+        if action == "stop":
+            r = observer.stop_recording(rid)
+            if r and "observer" in cells:
+                run_bg(lambda: cells["observer"].make_playbook(rid))
+            return JSONResponse(r or {"error": "No such recording."}, status_code=200 if r else 404)
+        if action == "mission":
+            r = observer.recording(rid)
+            if not r or not r["playbook"] or open_mission is None:
+                return JSONResponse({"error": "That recording has no playbook yet."}, status_code=409)
+            m = open_mission(f"Automate: {r['name']}"[:80],
+                             f"Patrick taught Wetworks this task. Work out how to automate it, or what an agent could do "
+                             f"for him each time, and propose it.\n\n{r['playbook'][:5000]}", "observer")
+            return JSONResponse(m)
+        return JSONResponse({"error": "Unknown action."}, status_code=404)
+
+    async def observer_forget(request: Request):
+        if observer is None:
+            return _obs_off()
+        b = await request.json()
+        n = observer.forget("all" if b.get("what") == "all" else "today")
+        events.add("observer", "info", f"Deleted {n} activity records")
+        return JSONResponse({"deleted": n})
+
     async def list_memory(request: Request):
         if memory is None:
             return JSONResponse({"memories": [], "count": 0})
@@ -515,7 +599,7 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
         state = await run_in_threadpool(lambda: floor_state(
             settings=settings, architect=architect, comms=comms, events=events, scheduler=scheduler, missions=missions,
             approvals=approvals, forge=forge, leads=getattr(comms, "leads", None), halt=halt,
-            finance=finance, dayjob=dayjob))
+            finance=finance, dayjob=dayjob, observer=observer))
         return JSONResponse(state)
 
     async def set_halt(request: Request):
@@ -569,6 +653,14 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
         Route("/api/dayjob/docs", dayjob_doc, methods=["POST"]),
         Route("/api/dayjob/docs/{did:int}", dayjob_doc, methods=["DELETE"]),
         Route("/api/dayjob/search", dayjob_search, methods=["GET"]),
+        Route("/api/observer", observer_overview, methods=["GET"]),
+        Route("/api/observer/helper", observer_helper, methods=["GET"]),
+        Route("/api/observer/samples", observer_samples, methods=["POST"]),
+        Route("/api/observer/shot", observer_shot, methods=["POST"]),
+        Route("/api/observer/pause", observer_pause, methods=["POST"]),
+        Route("/api/observer/recordings", observer_record, methods=["POST"]),
+        Route("/api/observer/recordings/{rid:int}/{action:str}", observer_record, methods=["POST"]),
+        Route("/api/observer/forget", observer_forget, methods=["POST"]),
         Route("/api/approvals", list_approvals, methods=["GET"]),
         Route("/api/approvals/{aid:int}", decide_approval, methods=["POST"]),
         Route("/api/memory", list_memory, methods=["GET"]),

@@ -100,6 +100,7 @@
     revenue:   { room: "revenue", home: [6, 3.6], station: [3.9, 3.4], bunk: [10, 3.7] },
     learner:   { room: "archives", home: [6.6, 3.5], station: [2.4, 2], bunk: [7.4, 3.8] },
     forge:     { room: "forge",   home: [8, 3.5], station: [4.5, 2.2] },
+    observer:  { room: "archives", home: [2.2, 3.3], station: [4.6, 2.4] },
     dayjob:    { room: "dayjob", home: [3.6, 3.2], station: [1.8, 2.3], bunk: [4.1, 3.4] },
     finance:   { room: "finance", home: [3.5, 3.2], station: [1.8, 2.3], bunk: [4.1, 3.4] },
   };
@@ -631,6 +632,7 @@
       if (a.next !== undefined) add("Next run", when(a.next));
       if (a.waiting_on_you) add("Waiting on you", `${a.waiting_on_you} approval${a.waiting_on_you === 1 ? "" : "s"}`);
       if (a.pipeline) add("Pipeline", `${a.pipeline.new || 0} new · ${a.pipeline.contacted || 0} contacted · ${a.pipeline.won || 0} won`);
+      if (a.watch) add("Watching", a.watch.paused ? "Paused" : a.watch.devices.length ? a.watch.devices.join(", ") : "No helper running");
       if (a.support) add("Support", `${a.support.open} open · ${a.support.fixes} fixes · ${a.support.docs} files`);
       if (a.money) add("Money", `${a.money.transactions} transactions · ${a.money.due_this_week} due this week`
         + (a.money.uncategorized ? ` · ${a.money.uncategorized} to sort` : ""));
@@ -654,8 +656,8 @@
         b.addEventListener("click", () => act("cycle", b));
         row.append(b);
       }
-      if (a.id === "finance" || a.id === "dayjob") {
-        const b = el("button", "small", a.id === "finance" ? "Open Finance" : "Open Day Job"); b.type = "button";
+      if (a.id === "finance" || a.id === "dayjob" || a.id === "observer") {
+        const b = el("button", "small", { finance: "Open Finance", dayjob: "Open Day Job", observer: "Open Observer" }[a.id]); b.type = "button";
         b.addEventListener("click", () => window.WWFloor.toTactical(a.id));
         row.append(b);
       }

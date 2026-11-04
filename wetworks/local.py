@@ -49,6 +49,21 @@ class Ollama:
         return "", tin, tout
 
 
+    def describe_image(self, image: bytes, prompt: str, max_tokens: int = 220) -> str:
+        """Ask the local model about one image (needs a vision-capable model, e.g. Gemma 3/4)."""
+        import base64
+
+        body = {"model": self.model, "stream": False, "think": False,
+                "messages": [{"role": "user", "content": prompt, "images": [base64.b64encode(image).decode()]}],
+                "options": {"num_ctx": 4096, "num_predict": max_tokens, "temperature": 0.2}}
+        r = httpx.post(f"{self.base}/api/chat", json=body, timeout=self.timeout)
+        if r.status_code == 400 and "think" in r.text.lower():
+            body.pop("think")
+            r = httpx.post(f"{self.base}/api/chat", json=body, timeout=self.timeout)
+        r.raise_for_status()
+        return (r.json().get("message", {}).get("content") or "").strip()
+
+
 class SearXNG:
     def __init__(self, base_url: str, timeout: float = 30):
         self.base = base_url.rstrip("/")

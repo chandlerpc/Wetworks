@@ -258,6 +258,37 @@
       <details class="fin-imports"><summary>Files in the library</summary><ul id="dj-docs" class="fin-list"></ul></details>
     </section>
 
+    <!-- The Observer: local only -->
+    <section id="pane-observer" class="pane" aria-labelledby="observer-h">
+      <h2 id="observer-h">Observer</h2>
+      <p class="note">Learns how your day works from your own computers. Screenshots are described by the local model and
+        deleted; work, money, password and private-browsing screens are never captured. Ideas it has show up under Ops → Needs you.</p>
+      <div class="obs-status"><p id="obs-devices" class="note"></p><button type="button" id="obs-pause" class="ghost small">Pause</button></div>
+      <details id="obs-setup" class="fin-imports"><summary>Start the helper on a computer</summary>
+        <p class="note">On the Mac (Terminal), from your Wetworks folder. The first time, macOS asks to allow Terminal
+          under Accessibility and Screen Recording.</p>
+        <pre class="obs-cmd">python3 observer/agent.py --server https://YOUR-MSI.ts.net --device mac</pre>
+        <p class="note">On the MSI (Ubuntu):</p>
+        <pre class="obs-cmd">python3 observer/agent.py --server http://localhost:8700 --device msi</pre>
+        <p class="note">Put the console access code in <code>~/.wetworks-observer</code> on each computer first. Never run it on a work computer.</p>
+      </details>
+      <div id="obs-today" class="obs-today"></div>
+      <h3 class="fin-h">Teach a task</h3>
+      <form id="obs-teach" class="dj-row">
+        <select id="obs-device" aria-label="Computer to record"></select>
+        <input id="obs-task" type="text" placeholder="What are you about to do?" aria-label="Task name" autocomplete="off">
+        <button type="submit" class="small" id="obs-rec-btn">Record</button>
+      </form>
+      <p id="obs-note" class="note"></p>
+      <ul id="obs-recordings" class="dj-tickets"></ul>
+      <h3 class="fin-h">Digests</h3>
+      <ul id="obs-digests" class="fin-list obs-digests"></ul>
+      <details class="fin-imports"><summary>Delete activity</summary>
+        <div class="lead-actions"><button type="button" class="ghost small" data-forget="today">Delete today</button>
+          <button type="button" class="ghost small" data-forget="all">Delete everything</button></div>
+      </details>
+    </section>
+
     <!-- Intel: findings -->
     <section id="pane-intel" class="pane" aria-labelledby="intel-h">
       <h2 id="intel-h">Intel</h2>
@@ -274,6 +305,7 @@
     <button type="button" data-pane="leads">Leads</button>
     <button type="button" data-pane="finance">Finance</button>
     <button type="button" data-pane="dayjob">Day Job</button>
+    <button type="button" data-pane="observer">Observer</button>
   </nav>
 
   <!-- Mission detail -->

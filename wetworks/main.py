@@ -10,6 +10,7 @@
 """
 
 import logging
+import re
 import sys
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -85,6 +86,11 @@ def build(settings):
 
     dayjob = DayJob(settings.data_dir / "dayjob.db")
     dayjob_cell = DayJobCell(ctx, dayjob)
+    from .cells.observer import ObserverCell
+    from .observer import Observer
+
+    observer = Observer(settings.data_dir / "observer.db", settings.config_dir / "observer.toml", tz=settings.timezone)
+    observer_cell = ObserverCell(ctx, observer)
     architect.min_importance = int(intel.config.get("intel", {}).get("min_importance_for_brief", 2))
     missions = MissionStore(settings.data_dir / "missions.db")
     coder = Coder(ctx, missions,
@@ -110,6 +116,7 @@ def build(settings):
     comms.leads = leads
     comms.finance = finance
     comms.dayjob = dayjob
+    comms.observer = observer
     learner = Learner(ctx, comms, missions)
 
     # ---- agents ----
@@ -119,6 +126,23 @@ def build(settings):
         comms._insert("architect", "architect", f"I need your OK on #{a['id']}: {a['summary']}. It's under Ops → Needs you.")
 
     approvals = Approvals(settings.data_dir / "agents.db", on_request=notify_approval)
+    observer_cell.approvals = approvals
+
+    def adopt_observation(kind, text="", which="", time="", title="", request=""):
+        """Runs when Patrick approves one of The Observer's suggestions."""
+        if kind == "preference":
+            memory.add(str(text), kind="preference", source="observer")
+            return "Saved as a standing preference."
+        if kind == "mission":
+            m = open_mission(str(title), str(request), "observer")
+            return f"Opened mission #{m['id']}: {m['title']}"
+        if kind == "brief_time" and which in ("morning", "evening") and re.fullmatch(r"\d{2}:\d{2}", str(time)):
+            save_override(settings, f"{which}_brief", str(time))
+            return (f"The {which} brief will move to {time}. It takes effect the next time Wetworks restarts "
+                    "(docker compose restart architect).")
+        return "Nothing to do for that suggestion."
+
+    approvals.executors["adopt_observation"] = adopt_observation
     followups = Followups(settings.data_dir / "agents.db")
 
     agent_ask = recorded(make_ask(settings, architect.llm, "architect"), traces, "architect", default_brain)
@@ -128,7 +152,8 @@ def build(settings):
                             followups=followups, workspace=coder.ws, daily_mission_cap=settings.agent_daily_missions,
                             chats=chats, forge=forge, finance=finance,
                             finance_level=finance_level(settings, finance, cloud=settings.agent_brain != "local"),
-                            dayjob=dayjob, dayjob_local=settings.agent_brain == "local")
+                            dayjob=dayjob, dayjob_local=settings.agent_brain == "local",
+                            observer=observer, observer_local=settings.agent_brain == "local")
     for name in ("merge_pull_request", "switch_local_model"):
         if name in toolbox.tools:
             approvals.executors[name] = toolbox.tools[name].fn
@@ -151,7 +176,7 @@ def build(settings):
                                 followups=followups, agent_name="clair", daily_mission_cap=settings.agent_daily_missions,
                                 commander=commander, chats=chats, finance=finance,
                                 finance_level=finance_level(settings, finance, cloud=True),
-                                dayjob=dayjob, dayjob_local=False)
+                                dayjob=dayjob, dayjob_local=False, observer=observer, observer_local=False)
     clair_brain = lambda: "gemini" if comms.clair_mode == "cloudflare" else default_brain()
     clair = ClairAgent(toolbox=clair_tools, ask=recorded(clair_ask(bridge, make_ask(settings, architect.llm, "clair"), clair_mode),
                                                          traces, "clair", clair_brain),
@@ -173,7 +198,32 @@ def build(settings):
                           architect_tools=toolbox, context_fn=architect.context_block, events=architect.events,
                           leads=leads, missions=missions, settings=settings, lessons_fn=forge.lessons)
     commander.halt = operator.halt = comms.halt = comms.drills.halt = halt
-    return architect, {"intel": intel, "revenue": revenue, "learner": learner, "finance": finance_cell, "dayjob": dayjob_cell}, comms
+    return architect, {"intel": intel, "revenue": revenue, "learner": learner, "finance": finance_cell, "dayjob": dayjob_cell, "observer": observer_cell}, comms
+
+
+def load_overrides(settings) -> None:
+    """Settings changed from the console (e.g. an approved Observer suggestion) win over .env."""
+    import json as _json
+
+    p = settings.data_dir / "overrides.json"
+    try:
+        for k, v in _json.loads(p.read_text()).items():
+            if k in ("morning_brief", "evening_brief"):
+                setattr(settings, k, v)
+    except (OSError, ValueError):
+        pass
+
+
+def save_override(settings, key: str, value) -> None:
+    import json as _json
+
+    p = settings.data_dir / "overrides.json"
+    try:
+        cur = _json.loads(p.read_text())
+    except (OSError, ValueError):
+        cur = {}
+    cur[key] = value
+    p.write_text(_json.dumps(cur, indent=2))
 
 
 def finance_level(settings, finance, cloud: bool) -> str:
@@ -190,6 +240,7 @@ def finance_level(settings, finance, cloud: bool) -> str:
 def run() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     settings = load_settings()
+    load_overrides(settings)
     architect, cells, comms = build(settings)
 
     if len(sys.argv) >= 3 and sys.argv[1] == "brief":
@@ -258,6 +309,12 @@ def run() -> None:
     sleepers.register(cells["finance"], [settings.morning_brief], lead_minutes=20)
     sleepers.register(cells["dayjob"], [settings.morning_brief], lead_minutes=15)
     sleepers.register(cells["learner"], [settings.learner_time])
+    sched.add_job(cells["observer"].safe_run, CronTrigger(hour=23, minute=15, timezone=settings.timezone),
+                  id="observer_nightly", misfire_grace_time=3600, coalesce=True)
+    mh, mm = map(int, settings.morning_brief.split(":"))
+    t = (mh * 60 + mm - 10) % (24 * 60)
+    sched.add_job(cells["observer"].morning_report, CronTrigger(hour=t // 60, minute=t % 60, timezone=settings.timezone),
+                  id="observer_morning", misfire_grace_time=3600, coalesce=True)
     sched.add_job(comms.forge.tick, "interval", minutes=5, id="forge_tick", max_instances=1, coalesce=True)
     sched.add_job(comms.drills.tick, "interval", minutes=max(5, settings.drill_every_minutes), id="drill_tick",
                   max_instances=1, coalesce=True)
@@ -301,7 +358,7 @@ def run() -> None:
                      open_mission=comms.open_mission_fn, voice=Voice(settings, architect.ledger,
                                                                  vocab_fn=lambda: [l["business"] for l in comms.leads.recent(limit=12)]), leads=comms.leads,
                      memory=comms.memory, approvals=comms.approvals, commander=comms.commander, forge=comms.forge,
-                     halt=comms.halt, finance=comms.finance, dayjob=comms.dayjob)
+                     halt=comms.halt, finance=comms.finance, dayjob=comms.dayjob, observer=comms.observer)
     log.info("Console listening on port %d", settings.console_port)
     uvicorn.run(app, host="0.0.0.0", port=settings.console_port, log_level="warning")
     sched.shutdown(wait=False)

@@ -350,6 +350,26 @@ have `search_past_chats` and `read_past_chat`.
 - Cloud agents can't search it; local-brain agents get titles and snippets; drills see a sample.
 - Console Day Job tab; Day Job room unsealed on the Floor. Phone tabs now scroll.
 
+## Milestone 21: The Observer
+
+- `observer/agent.py`: a stdlib-only helper Patrick runs on his own computers (macOS via osascript and
+  screencapture; the MSI from WSL through powershell.exe). Every 5–10 s it reports the foreground app,
+  window title and idle time; while active, a screenshot every `screenshot_every_seconds`. It polls its
+  config every 15 s, so Pause and Record from the console take effect quickly. No keystrokes.
+- `wetworks/observer.py`: excluded apps and title words (work/patient screens, money, passwords, private
+  browsing) are stored only as "Private" time, checked on the helper and again on the server.
+  Screenshots are described in one sentence by the local vision model (Gemma), scrubbed, and never
+  written to disk. Raw activity is pruned after `keep_days`.
+- Day view: active time, apps, focus blocks (25+ min), context switches, hourly strip, what was on
+  screen. Patterns over 14 days: usual start and end, morning routine, daily apps.
+- Nightly (23:15): a digest by the local model, pruning, and suggestions as approval cards
+  (`adopt_observation`): brief times (saved to `data/overrides.json`, applied on restart), a morning
+  prep mission, and up to two automation ideas. Each idea is only suggested once.
+- Teach a task: Record on a chosen computer captures a step every 5 s; Stop has the local model write
+  a playbook, which can become a mission ("Automate this").
+- The brief gets yesterday's hours and focus-block count only. Local-brain agents get `observer_today`
+  to time things around Patrick's focus; cloud agents get nothing; drills see samples.
+
 ## Next milestones
 
 1. Claude powering the agents and the Code cell (Friday).
