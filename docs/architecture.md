@@ -319,6 +319,23 @@ have `search_past_chats` and `read_past_chat`.
   amber lights on sealed doors, C.L.a.i.R's own glow; then coloured bloom.
 - Characters are stand-ins drawn in the pack's style until image-AI sprites arrive (see art spec).
 
+## Milestone 19: Finance room unsealed
+
+- `wetworks/finance.py`: local SQLite (`data/finance.db`). Imports bank/card CSVs (finds the header row,
+  date/description/amount or debit/credit columns, flips card exports where purchases are positive),
+  masks 6+ digit runs, dedupes on re-import, undo per import.
+- Categories from `config/finance.toml` rules, then learned merchants (Patrick's corrections apply to
+  every charge from that merchant), then the local model for the rest (the cell never calls a cloud model).
+- Recurring detection: steady cadence (weekly → yearly) and steady amount; everyday categories need
+  near-identical amounts. Feeds "due in the next 30 days" and the recurring monthly total.
+- Privacy levels: `local` (full detail: console, local-brain agents), `totals` (no merchants or single
+  transactions), `counts` (no amounts), `none`. The brief uses `finance.brief`; cloud agents get
+  nothing unless `share_with_cloud = true`. Drills always see fake numbers.
+- The Bookkeeper (Sleeper) runs 20 minutes before the morning brief: sorts merchants, reports bills due
+  this week, categories at 90%+ of budget, and new recurring charges.
+- Console: Finance tab (import, month vs budgets, due soon, recurring, transactions with category
+  pickers, import history with undo). The Finance room on the Floor is unsealed.
+
 ## Next milestones
 
 1. Claude powering the agents and the Code cell (Friday).

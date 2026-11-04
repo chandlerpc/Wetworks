@@ -75,6 +75,11 @@ def build(settings):
     leads = LeadStore(settings.data_dir / "leads.db")
     revenue = Revenue(ctx, leads)
     architect.leads = leads
+    from .cells.finance import FinanceCell
+    from .finance import Finance
+
+    finance = Finance(settings.data_dir / "finance.db", settings.config_dir / "finance.toml")
+    finance_cell = FinanceCell(ctx, finance)
     architect.min_importance = int(intel.config.get("intel", {}).get("min_importance_for_brief", 2))
     missions = MissionStore(settings.data_dir / "missions.db")
     coder = Coder(ctx, missions,
@@ -98,6 +103,7 @@ def build(settings):
     comms.missions, comms.operator, comms.open_mission_fn = missions, operator, open_mission
     revenue.open_mission = lambda title, request, source: open_mission(title, request, source)
     comms.leads = leads
+    comms.finance = finance
     learner = Learner(ctx, comms, missions)
 
     # ---- agents ----
@@ -114,7 +120,8 @@ def build(settings):
     toolbox = build_toolbox(llm=architect.llm, memory=memory, missions=missions, open_mission=open_mission,
                             findings=architect.findings, leads=leads, revenue=revenue, notify=architect.notify,
                             followups=followups, workspace=coder.ws, daily_mission_cap=settings.agent_daily_missions,
-                            chats=chats, forge=forge)
+                            chats=chats, forge=forge, finance=finance,
+                            finance_level=finance_level(settings, finance, cloud=settings.agent_brain != "local"))
     for name in ("merge_pull_request", "switch_local_model"):
         if name in toolbox.tools:
             approvals.executors[name] = toolbox.tools[name].fn
@@ -135,7 +142,8 @@ def build(settings):
     clair_tools = build_toolbox(llm=architect.llm, memory=memory, missions=missions, open_mission=open_mission,
                                 findings=architect.findings, leads=leads, revenue=revenue, notify=architect.notify,
                                 followups=followups, agent_name="clair", daily_mission_cap=settings.agent_daily_missions,
-                                commander=commander, chats=chats)
+                                commander=commander, chats=chats, finance=finance,
+                                finance_level=finance_level(settings, finance, cloud=True))
     clair_brain = lambda: "gemini" if comms.clair_mode == "cloudflare" else default_brain()
     clair = ClairAgent(toolbox=clair_tools, ask=recorded(clair_ask(bridge, make_ask(settings, architect.llm, "clair"), clair_mode),
                                                          traces, "clair", clair_brain),
@@ -157,7 +165,18 @@ def build(settings):
                           architect_tools=toolbox, context_fn=architect.context_block, events=architect.events,
                           leads=leads, missions=missions, settings=settings, lessons_fn=forge.lessons)
     commander.halt = operator.halt = comms.halt = comms.drills.halt = halt
-    return architect, {"intel": intel, "revenue": revenue, "learner": learner}, comms
+    return architect, {"intel": intel, "revenue": revenue, "learner": learner, "finance": finance_cell}, comms
+
+
+def finance_level(settings, finance, cloud: bool) -> str:
+    """How much of Patrick's money an agent may see: local brains get detail; cloud brains only what
+    config/finance.toml allows (nothing unless share_with_cloud = true)."""
+    cfg = finance.config()
+    if not cloud:
+        return "local"
+    if not cfg.get("share_with_cloud", False):
+        return "none"
+    return "counts" if cfg.get("brief") == "counts" else "totals"
 
 
 def run() -> None:
@@ -228,6 +247,7 @@ def run() -> None:
     sleepers.register(cells["intel"], [settings.morning_brief, settings.evening_brief],
                       lead_minutes=settings.intel_lead_minutes)
     sleepers.register(cells["revenue"], [settings.morning_brief], lead_minutes=settings.revenue_lead_minutes)
+    sleepers.register(cells["finance"], [settings.morning_brief], lead_minutes=20)
     sleepers.register(cells["learner"], [settings.learner_time])
     sched.add_job(comms.forge.tick, "interval", minutes=5, id="forge_tick", max_instances=1, coalesce=True)
     sched.add_job(comms.drills.tick, "interval", minutes=max(5, settings.drill_every_minutes), id="drill_tick",
@@ -272,7 +292,7 @@ def run() -> None:
                      open_mission=comms.open_mission_fn, voice=Voice(settings, architect.ledger,
                                                                  vocab_fn=lambda: [l["business"] for l in comms.leads.recent(limit=12)]), leads=comms.leads,
                      memory=comms.memory, approvals=comms.approvals, commander=comms.commander, forge=comms.forge,
-                     halt=comms.halt)
+                     halt=comms.halt, finance=comms.finance)
     log.info("Console listening on port %d", settings.console_port)
     uvicorn.run(app, host="0.0.0.0", port=settings.console_port, log_level="warning")
     sched.shutdown(wait=False)

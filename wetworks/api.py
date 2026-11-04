@@ -56,7 +56,7 @@ def _iso(dt) -> str | None:
 
 def create_app(*, settings, architect, cells: dict, comms, events, scheduler=None,
                missions=None, open_mission=None, voice=None, leads=None, memory=None, approvals=None,
-               commander=None, forge=None, halt=None) -> Starlette:
+               commander=None, forge=None, halt=None, finance=None) -> Starlette:
     def run_bg(fn):
         threading.Thread(target=fn, daemon=True).start()
 
@@ -178,6 +178,8 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
             if "architect" in events.busy:
                 return JSONResponse({"error": "The Architect is busy. Try again in a moment."}, status_code=409)
             run_bg(lambda: commander.cycle("manual"))
+        elif name == "finance" and "finance" in cells:
+            run_bg(cells["finance"].safe_run)
         elif name == "revenue" and "revenue" in cells:
             if "revenue" in events.busy:
                 return JSONResponse({"error": "Revenue is already hunting."}, status_code=409)
@@ -287,6 +289,67 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
             return JSONResponse({"error": "Unknown action."}, status_code=404)
         return JSONResponse(lead)
 
+    # ---- Finance (local only; this is Patrick's money) ----------------------------------------
+    async def finance_overview(request: Request):
+        if finance is None:
+            return JSONResponse({"error": "Finance isn't set up."}, status_code=503)
+        from .finance import CATEGORIES
+
+        month = request.query_params.get("month") or None
+        return JSONResponse({**finance.summary_for("local"), "month_detail": finance.month(month), "categories": CATEGORIES,
+                             "imports": finance.batches(), "count": finance.count(),
+                             "uncategorized": len(finance.uncategorized_merchants(500)),
+                             "wetworks_ai": round(architect.ledger.month_to_date(), 2)})
+
+    async def finance_tx(request: Request):
+        if finance is None:
+            return JSONResponse({"transactions": []})
+        q = request.query_params
+        return JSONResponse({"transactions": finance.transactions(q.get("category", ""), q.get("q", ""), q.get("month", ""),
+                                                                   int(q.get("limit", 200)))})
+
+    async def finance_import(request: Request):
+        if finance is None:
+            return JSONResponse({"error": "Finance isn't set up."}, status_code=503)
+        from .finance import FinanceError
+
+        raw = await request.body()
+        if not raw:
+            return JSONResponse({"error": "No file received."}, status_code=400)
+        if len(raw) > 8_000_000:
+            return JSONResponse({"error": "That file is too big for one import."}, status_code=413)
+        q = request.query_params
+        try:
+            text = raw.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            text = raw.decode("latin-1")
+        try:
+            r = await run_in_threadpool(finance.import_csv, text, q.get("account", ""), q.get("filename", ""), q.get("flip", "auto"))
+        except FinanceError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        events.add("finance", "info", f"Imported {r['added']} transactions into {r['account']}"
+                   + (f" ({r['skipped']} already there)" if r["skipped"] else ""))
+        if "finance" in cells:
+            run_bg(cells["finance"].sort_uncategorized)
+        return JSONResponse(r)
+
+    async def finance_undo(request: Request):
+        n = finance.undo_batch(int(request.path_params["bid"])) if finance is not None else 0
+        events.add("finance", "info", f"Removed an import ({n} transactions)")
+        return JSONResponse({"removed": n})
+
+    async def finance_set(request: Request):
+        from .finance import FinanceError
+
+        body = await request.json()
+        try:
+            t = finance.set_category(int(request.path_params["tid"]), str(body.get("category", "")), bool(body.get("remember", True)))
+        except FinanceError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        if not t:
+            return JSONResponse({"error": "No such transaction."}, status_code=404)
+        return JSONResponse(t)
+
     async def list_memory(request: Request):
         if memory is None:
             return JSONResponse({"memories": [], "count": 0})
@@ -371,7 +434,8 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
 
         state = await run_in_threadpool(lambda: floor_state(
             settings=settings, architect=architect, comms=comms, events=events, scheduler=scheduler, missions=missions,
-            approvals=approvals, forge=forge, leads=getattr(comms, "leads", None), halt=halt))
+            approvals=approvals, forge=forge, leads=getattr(comms, "leads", None), halt=halt,
+            finance=finance))
         return JSONResponse(state)
 
     async def set_halt(request: Request):
@@ -413,6 +477,11 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
         Route("/api/halt", set_halt, methods=["POST"]),
         Route("/api/forge", forge_status, methods=["GET"]),
         Route("/api/forge/{name}", forge_action, methods=["POST"]),
+        Route("/api/finance", finance_overview, methods=["GET"]),
+        Route("/api/finance/transactions", finance_tx, methods=["GET"]),
+        Route("/api/finance/transactions/{tid:int}", finance_set, methods=["POST"]),
+        Route("/api/finance/import", finance_import, methods=["POST"]),
+        Route("/api/finance/imports/{bid:int}", finance_undo, methods=["DELETE"]),
         Route("/api/approvals", list_approvals, methods=["GET"]),
         Route("/api/approvals/{aid:int}", decide_approval, methods=["POST"]),
         Route("/api/memory", list_memory, methods=["GET"]),

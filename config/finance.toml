@@ -1,0 +1,48 @@
+# Finance cell. Your transactions stay on the MSI: only the local model ever reads them, and only
+# summaries go into the brief or to cloud agents. Edit freely; it's re-read every time.
+
+[finance]
+enabled = true
+
+# What the morning brief (and Discord) may say about money:
+#   totals = category totals and amounts, never merchants or individual transactions
+#   counts = no amounts at all ("2 bills due this week")
+#   off    = nothing
+brief = "totals"
+
+# Let cloud agents (C.L.a.i.R on Gemini, Claude from Friday) see the same summary level as the brief.
+# false = Finance is only visible in the console and to agents thinking on the local model.
+share_with_cloud = false
+
+# Monthly budgets by category (dollars). Leave a category out to just track it.
+[finance.budgets]
+Dining = 300
+Groceries = 600
+Shopping = 250
+Subscriptions = 80
+"AI & tools" = 60
+Entertainment = 100
+
+# Words that put a charge in a category (case-insensitive, matched inside the description).
+# When you change a charge's category in the console, Wetworks remembers that merchant too.
+[finance.rules]
+Housing = ["rent", "mortgage", "hoa "]
+Utilities = ["duke energy", "fpl", "florida power", "water util", "seminole county util", "comcast", "xfinity",
+             "spectrum", "at&t", "att*", "verizon", "t-mobile", "tmobile", "teco"]
+Groceries = ["publix", "aldi", "kroger", "whole foods", "trader joe", "sprouts", "winn-dixie", "costco", "sams club",
+             "wal-mart super", "walmart super"]
+Dining = ["mcdonald", "starbucks", "chick-fil-a", "chickfila", "doordash", "uber eats", "ubereats", "grubhub", "taco bell",
+          "wendy", "burger king", "chipotle", "dunkin", "panera", "pizza", "restaurant", "cafe", "grill", "sushi", "subway"]
+Gas = ["shell", "chevron", "wawa", "racetrac", "exxon", "mobil", "sunoco", "marathon", "circle k", "7-eleven", "speedway"]
+Transport = ["uber trip", "uber *trip", "lyft", "sunpass", "e-pass", "epass", "parking", "toll"]
+Subscriptions = ["netflix", "spotify", "hulu", "disney plus", "disneyplus", "max.com", "hbo max", "youtube premium",
+                 "apple.com/bill", "icloud", "amazon prime", "prime video", "xbox", "playstation", "crunchyroll", "patreon"]
+"AI & tools" = ["anthropic", "claude.ai", "openai", "chatgpt", "github", "cursor", "midjourney", "pixellab", "retro diffusion",
+                "google cloud", "cloudflare", "digitalocean", "vercel", "itch.io", "tailscale", "azure", "microsoft*azure"]
+Entertainment = ["steam", "pearl abyss", "black desert", "ticketmaster", "amc ", "regal ", "fandango"]
+Shopping = ["amazon", "amzn", "target", "best buy", "ebay", "etsy", "home depot", "lowe's", "lowes", "walmart"]
+Health = ["cvs", "walgreens", "pharmacy", "dental", "medical", "clinic", "hospital"]
+Insurance = ["geico", "progressive", "state farm", "allstate", "insurance"]
+Fees = ["overdraft", "late fee", "service fee", "interest charge", "annual fee", "atm fee"]
+Income = ["payroll", "direct dep", "dir dep", "salary", "novarad"]
+Transfers = ["transfer", "zelle", "venmo", "cash app", "paypal transfer", "payment thank you", "autopay", "credit card payment"]

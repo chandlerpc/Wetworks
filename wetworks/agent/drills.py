@@ -42,6 +42,10 @@ SIMULATED = {
     "tell_architect": lambda note="": "Passed to The Architect; he'll pick it up within a few minutes.",
     "build_training_data": lambda: {"name": "agent-steps", "train": 0, "holdout": 0, "needed": 150},
     "queue_training": lambda name="", dataset="agent-steps": f"Queued training job {next(_ids)} for tonight's window (1-5 local).",
+    # Never real money data in a drill: drills think on Gemini.
+    "finance_summary": lambda: {"month": "sample", "spent_this_month": 1234.56, "by_category": [
+        {"category": "Groceries", "spent": 410.0, "budget": 600}, {"category": "Dining", "spent": 285.0, "budget": 300}],
+        "recurring_monthly_total": 96.4, "due_this_week": {"count": 2, "total": 61.98}, "categories_near_budget": ["Dining"]},
     "benchmark_model": lambda model="", dataset="agent-steps": f"Benchmark of {model} queued; results show in forge_status.",
 }
 

@@ -558,6 +558,105 @@
     return li;
   }
 
+  // ---- Finance (local only) -------------------------------------------
+  let finCat = "", finCats = [];
+  const usd = (v) => `${v < 0 ? "−" : ""}$${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const shortDate = (d) => new Date(`${d}T12:00:00`).toLocaleDateString([], { month: "short", day: "numeric" });
+  async function loadFinance() {
+    const f = await api("/api/finance");
+    finCats = f.categories || [];
+    const m = f.month_detail;
+    const box = $("#fin-month"); box.replaceChildren();
+    if (!f.count) {
+      box.append(el("p", "note", "No transactions yet. On your bank's or card's website, download transactions as CSV, "
+        + "type the account name above, then Import CSV. Re-importing the same file is safe: duplicates are skipped."));
+    } else {
+      const head = el("div", "fin-totals");
+      head.append(el("div", null, ""), el("div", null, ""));
+      head.children[0].append(el("span", "fh-label", "Spent this month"), el("strong", "fin-big", usd(m.spent)));
+      head.children[1].append(el("span", "fh-label", "Income"), el("strong", "fin-big in", usd(m.income)));
+      box.append(head);
+      m.by_category.forEach((c) => {
+        const row = el("div", "fin-cat");
+        const pct = c.budget ? Math.min(100, (c.spent / c.budget) * 100) : 0;
+        row.append(el("span", null, c.category), el("span", "mono", c.budget ? `${usd(c.spent)} of ${usd(c.budget)}` : usd(c.spent)));
+        const bar = el("div", "meter"); const fill = el("span"); fill.style.width = `${c.budget ? pct : 0}%`;
+        fill.className = c.budget && c.spent >= c.budget ? "over" : c.budget && c.spent >= 0.8 * c.budget ? "warn" : "";
+        bar.append(fill); row.append(bar);
+        row.addEventListener("click", () => { finCat = c.category; safe(loadFinanceTx)(); });
+        box.append(row);
+      });
+      if (f.wetworks_ai) box.append(el("p", "note", `Wetworks' own AI spend this month: ${usd(f.wetworks_ai)} (tracked separately).`));
+      if (f.uncategorized) box.append(el("p", "note warn", `${f.uncategorized} merchant${f.uncategorized > 1 ? "s" : ""} not sorted yet. The local model sorts them each morning, or set them below.`));
+    }
+    const up = $("#fin-upcoming"); up.replaceChildren();
+    const soon = (f.recurring || []).filter((r) => r.active && (new Date(r.next) - new Date()) / 864e5 <= 30);
+    if (!soon.length) up.append(el("li", "note", f.count ? "Nothing expected." : ""));
+    soon.forEach((r) => { const li = el("li"); li.append(el("span", "mono", shortDate(r.next)), el("span", null, r.label), el("span", "mono", usd(r.amount))); up.append(li); });
+    const rec = $("#fin-recurring"); rec.replaceChildren();
+    $("#fin-rec-total").textContent = f.recurring_monthly_total ? `· about ${usd(f.recurring_monthly_total)} a month` : "";
+    (f.recurring || []).forEach((r) => {
+      const li = el("li", r.active ? "" : "stale");
+      li.append(el("span", null, r.label), el("span", "muted", `${r.cadence}${r.active ? "" : " · stopped?"}`), el("span", "mono", usd(r.amount)));
+      rec.append(li);
+    });
+    const chips = $("#fin-filter");
+    if (chips.children.length !== finCats.length + 1) {
+      chips.replaceChildren();
+      [["", "All"], ...finCats.map((c) => [c, c])].forEach(([k, label]) => {
+        const b = el("button", "chip", label); b.type = "button"; b.dataset.cat = k;
+        b.addEventListener("click", () => { finCat = k; safe(loadFinanceTx)(); });
+        chips.append(b);
+      });
+    }
+    const bl = $("#fin-batches"); bl.replaceChildren();
+    (f.imports || []).forEach((b) => {
+      const li = el("li");
+      li.append(el("span", null, `${b.account} · ${b.added} added${b.skipped ? `, ${b.skipped} already there` : ""}${b.flipped ? " · signs flipped" : ""}`),
+        el("span", "muted", ago(b.ts)));
+      const u = el("button", "ghost small", "Undo"); u.type = "button";
+      u.addEventListener("click", async () => { u.disabled = true; await api(`/api/finance/imports/${b.id}`, { method: "DELETE" }); safe(loadFinance)(); });
+      li.append(u); bl.append(li);
+    });
+    await loadFinanceTx();
+  }
+  async function loadFinanceTx() {
+    $$("#fin-filter .chip").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.cat === finCat)));
+    const { transactions } = await api(`/api/finance/transactions?limit=150${finCat ? `&category=${encodeURIComponent(finCat)}` : ""}`);
+    const ul = $("#fin-tx"); ul.replaceChildren();
+    transactions.forEach((t) => {
+      const li = el("li", t.amount > 0 ? "in" : "");
+      const sel = el("select"); sel.setAttribute("aria-label", `Category for ${t.description}`);
+      finCats.forEach((c) => { const o = el("option", null, c); o.value = c; o.selected = c === t.category; sel.append(o); });
+      if (t.cat_source === "none") sel.classList.add("unsorted");
+      sel.addEventListener("change", async () => {
+        try { await api(`/api/finance/transactions/${t.id}`, { method: "POST", body: JSON.stringify({ category: sel.value, remember: true }) }); safe(loadFinance)(); }
+        catch (err) { if (err.message !== "unauthorized") alert(err.message); }
+      });
+      li.append(el("span", "mono", shortDate(t.day)), el("span", "desc", t.description), el("span", "mono amt", usd(t.amount)), sel);
+      ul.append(li);
+    });
+    if (!transactions.length) ul.append(el("li", "note", finCat ? "Nothing in this category." : ""));
+  }
+  function bindFinance() {
+    const file = $("#fin-file"), note = $("#fin-note");
+    try { $("#fin-account").value = localStorage.getItem("wetworks.finAccount") || ""; } catch {}
+    file.addEventListener("change", async () => {
+      const f = file.files[0]; if (!f) return;
+      const account = $("#fin-account").value.trim();
+      try { localStorage.setItem("wetworks.finAccount", account); } catch {}
+      note.textContent = "Importing…"; note.className = "note";
+      try {
+        const j = await api(`/api/finance/import?account=${encodeURIComponent(account)}&filename=${encodeURIComponent(f.name)}`,
+          { method: "POST", headers: { "Content-Type": "text/csv" }, body: await f.text() });
+        note.textContent = `Imported ${j.added} into ${j.account}${j.skipped ? ` (${j.skipped} already there)` : ""}`
+          + (j.flipped ? ". This looked like a card statement, so purchases were counted as money out." : ".");
+        safe(loadFinance)();
+      } catch (err) { note.textContent = err.message; note.className = "note err"; }
+      file.value = "";
+    });
+  }
+
   // ---- Actions --------------------------------------------------------
   async function runAction(btn) {
     const note = $("#action-note");
@@ -611,9 +710,9 @@
     showPane(store.get("wetworks.pane") || "ops");
     selectChannel(channel);
     const s = safe(loadStatus), ev = safe(loadEvents), m = safe(loadMessages), f = safe(loadFindings), mi = safe(loadMissions), le = safe(loadLeads);
-    s(); ev(); f(); mi(); le(); safe(loadMemory)();
+    s(); ev(); f(); mi(); le(); safe(loadMemory)(); safe(loadFinance)();
     const ap = safe(loadApprovals); ap(); timers.push(setInterval(ap, 10000));
-    timers.push(setInterval(le, 30000));
+    timers.push(setInterval(le, 30000), setInterval(safe(loadFinance), 60000));
     if (window.WWVoice) window.WWVoice.init();
     if (window.WWFloor) {
       window.WWFloor.toTactical = (pane, channel, missionId) => {
@@ -685,6 +784,8 @@
   $$("#viewswitch button").forEach((b) => b.addEventListener("click", () => setView(b.dataset.view)));
   window.matchMedia("(min-width: 1000px)").addEventListener("change", () => { if (token) setView(view); });
   $("#mem-add").addEventListener("submit", addMemory);
+  $("#fin-import").addEventListener("submit", (e) => e.preventDefault());
+  bindFinance();
   $("#mem-search").addEventListener("submit", (e) => { e.preventDefault(); safe(loadMemory)(); });
   let memT = null;
   $("#mem-q").addEventListener("input", () => { clearTimeout(memT); memT = setTimeout(() => safe(loadMemory)(), 300); });

@@ -13,7 +13,7 @@ ROOMS = [
     {"id": "forge", "name": "The Forge", "sealed": False},
     {"id": "archives", "name": "Archives", "sealed": False},
     {"id": "dayjob", "name": "Day Job", "sealed": True},
-    {"id": "finance", "name": "Finance", "sealed": True},
+    {"id": "finance", "name": "Finance", "sealed": False},
     {"id": "gamedev", "name": "Game Dev", "sealed": True},
     {"id": "content", "name": "Content", "sealed": True},
 ]
@@ -24,7 +24,7 @@ def _iso(dt):
 
 
 def floor_state(*, settings, architect, comms, events, scheduler=None, missions=None, approvals=None, forge=None,
-                leads=None, halt=None) -> dict:
+                leads=None, halt=None, finance=None) -> dict:
     busy = set(events.busy)
     since = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
     recent = events.recent(limit=60)
@@ -82,6 +82,12 @@ def floor_state(*, settings, architect, comms, events, scheduler=None, missions=
          "state": state("learner", sleeper=True), "vendor": "local", "model": local, "next": _iso(nxt.get("learner")),
          "last": last("learner")},
     ]
+    if finance is not None:
+        agents.append({"id": "finance", "name": "The Bookkeeper", "role": "Sleeper", "room": "finance", "kind": "sleeper",
+                       "state": state("finance", sleeper=True), "vendor": "local", "model": local,
+                       "next": _iso(nxt.get("finance")), "last": last("finance"),
+                       "money": {"due_this_week": len(finance.upcoming(7)), "uncategorized": len(finance.uncategorized_merchants(500)),
+                                 "transactions": finance.count()}})
 
     forge_info = {}
     if forge is not None:

@@ -203,6 +203,26 @@
       <ul id="leads" class="leads"></ul>
     </section>
 
+    <!-- Finance: local only -->
+    <section id="pane-finance" class="pane" aria-labelledby="finance-h">
+      <h2 id="finance-h">Finance</h2>
+      <p class="note fin-private">Stays on the MSI. Only the local model reads it; the brief gets totals at most.</p>
+      <form id="fin-import" class="fin-import">
+        <input id="fin-account" type="text" placeholder="Account name (e.g. Chase checking)" aria-label="Account name" autocomplete="off">
+        <label class="ghost small file-btn">Import CSV<input id="fin-file" type="file" accept=".csv,text/csv" hidden></label>
+      </form>
+      <p id="fin-note" class="note"></p>
+      <div id="fin-month" class="fin-month"></div>
+      <h3 class="fin-h">Due in the next 30 days</h3>
+      <ul id="fin-upcoming" class="fin-list"></ul>
+      <h3 class="fin-h">Recurring <span id="fin-rec-total" class="muted"></span></h3>
+      <ul id="fin-recurring" class="fin-list"></ul>
+      <h3 class="fin-h">Transactions</h3>
+      <div id="fin-filter" class="chips" role="group" aria-label="Filter by category"></div>
+      <ul id="fin-tx" class="fin-tx"></ul>
+      <details class="fin-imports"><summary>Imports</summary><ul id="fin-batches" class="fin-list"></ul></details>
+    </section>
+
     <!-- Intel: findings -->
     <section id="pane-intel" class="pane" aria-labelledby="intel-h">
       <h2 id="intel-h">Intel</h2>
@@ -217,6 +237,7 @@
     <button type="button" data-pane="comms">Comms</button>
     <button type="button" data-pane="intel">Intel</button>
     <button type="button" data-pane="leads">Leads</button>
+    <button type="button" data-pane="finance">Finance</button>
   </nav>
 
   <!-- Mission detail -->

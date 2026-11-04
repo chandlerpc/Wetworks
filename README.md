@@ -108,6 +108,16 @@ best fits. It never sends anything: review, copy and track leads in the console'
 docker compose exec architect python -m wetworks.main run revenue
 ```
 
+## Finance
+
+Your money stays on the MSI: only the local model reads transactions, and the morning brief gets
+totals at most (`config/finance.toml` sets that, plus budgets and category rules).
+
+On your bank's or card's website, download transactions as **CSV**, then in the console open
+**Finance**, type the account name, and tap **Import CSV**. Re-importing an overlapping file is
+safe. Fix a category once and every charge from that merchant follows. The Bookkeeper sorts new
+merchants each morning and flags bills due this week, budgets near their limit, and new recurring charges.
+
 ## The Forge (training)
 
 The Forge learns from lessons: decisions Gemini (and Claude, later) made while driving the agents.

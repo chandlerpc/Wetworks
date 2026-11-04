@@ -8,6 +8,7 @@ from .runtime import Tool, Toolbox
 
 def build_toolbox(*, llm, memory, missions, open_mission, findings, leads, revenue, notify,
                   followups, workspace=None, agent_name="architect", daily_mission_cap=6, commander=None,
+                  finance=None, finance_level="none",
                   chats=None, forge=None) -> Toolbox:
     t = Toolbox()
 
@@ -113,6 +114,16 @@ def build_toolbox(*, llm, memory, missions, open_mission, findings, leads, reven
                {"id": "lead number", "notes": "what you found", "dismiss": "(optional) true to dismiss"}, note_lead))
     t.add(Tool("draft_outreach", "Write (or rewrite) the outreach email draft for a lead. It is NOT sent.",
                {"id": "lead number"}, draft_outreach))
+
+    # ---- money (Patrick's; detail stays with local brains) ------------------------
+    if finance is not None and finance_level != "none":
+        t.add(Tool("finance_summary", "Patrick's money this month: spending by category vs budget, bills and "
+                   "subscriptions due soon, recurring monthly total." + (" Totals only." if finance_level != "local" else ""),
+                   {}, lambda: finance.summary_for(finance_level)))
+    elif finance is not None:
+        t.add(Tool("finance_summary", "Patrick's money. Details stay on the MSI and aren't shared with you.",
+                   {}, lambda: "Finance details stay on the MSI and aren't shared with cloud models. "
+                               "Point Patrick to the Finance room in the console."))
 
     # ---- memory and time -------------------------------------------------------
     t.add(Tool("remember", "Save a durable fact Patrick stated (a preference, decision, project, person).",

@@ -65,7 +65,8 @@
     comms:    { r: [30, 14, 7, 10], wall: "lavender", floor: "dotsNavy",   door: ["n", 2], tint: "#7FB2E5" },
     codebay:  { r: [38, 14, 9, 10], wall: "teal",     floor: "diamondNavy", door: ["n", 3], tint: C.steel },
     forge:    { r: [1, 26, 15, 9],  wall: "wood",     floor: "checkNavy",  door: ["n", 6], tint: C.signal },
-    dayjob:   { r: [17, 26, 7, 9], sealed: true }, finance: { r: [24, 26, 7, 9], sealed: true },
+    dayjob:   { r: [17, 26, 7, 9], sealed: true },
+    finance:  { r: [24, 26, 7, 9], wall: "wood", floor: "navyTile", door: ["n", 2], tint: "#E9C46A" },
     gamedev:  { r: [31, 26, 8, 9], sealed: true },  content: { r: [39, 26, 8, 9], sealed: true },
   };
   const MAP_W = 48, MAP_H = 36, FACE = 3;   // wall faces are 3 tiles tall
@@ -87,6 +88,7 @@
               ["rugG", 4.6, 0.6], ["confNavy", 5.6, 0.1, true], ["holo", 1.2, 0.4], ["holo", 12.6, 0.4]],
     comms: [["abstract", 0.4, -2.4], ["deskOlivePC", 0.8, 0.8], ["chairG", 1.5, 2.1], ["holo", 4.3, 0.3]],
     codebay: [["data2", 0.5, -2.4], ["data1", 2, -2.4], ["globe", 4.5, -2.1], ["uDeskB", 1.2, 0.6], ["termB", 1.6, 0.8], ["termP", 4.3, 0.8], ["chairB", 2.6, 3]],
+    finance: [["chart", 0.2, -2.3], ["data2", 3.1, -2.4], ["deskPC", 0.4, 0.5], ["chairG", 1.3, 1.8], ["drawersItems", 3.3, 0.2]],
     forge: [["cabRed", 0.5, -2], ["cabPurple", 2.5, -2], ["cabRed", 4.5, -2], ["cabPurple", 6.5, -2], ["cabRed", 8.5, -2], ["termP", 10.5, 0.2], ["chairRside", 11.8, 0.6]],
   };
   // Where people stand (tiles from floor origin). Stations when working, home when idle, bunk when asleep.
@@ -97,6 +99,7 @@
     revenue:   { room: "revenue", home: [6, 3.6], station: [3.9, 3.4], bunk: [10, 3.7] },
     learner:   { room: "archives", home: [6.6, 3.5], station: [2.4, 2], bunk: [7.4, 3.8] },
     forge:     { room: "forge",   home: [8, 3.5], station: [4.5, 2.2] },
+    finance:   { room: "finance", home: [3.5, 3.2], station: [1.8, 2.3], bunk: [4.1, 3.4] },
   };
   const SLOTS = { ready: [[2, 2.2], [4, 2.2], [6, 2.2], [9, 2.4], [11, 2.4], [13, 2.4]], codebay: [[3.3, 3.6], [5, 3.6], [1, 3.6], [6, 2]] };
 
@@ -626,6 +629,8 @@
       if (a.next !== undefined) add("Next run", when(a.next));
       if (a.waiting_on_you) add("Waiting on you", `${a.waiting_on_you} approval${a.waiting_on_you === 1 ? "" : "s"}`);
       if (a.pipeline) add("Pipeline", `${a.pipeline.new || 0} new · ${a.pipeline.contacted || 0} contacted · ${a.pipeline.won || 0} won`);
+      if (a.money) add("Money", `${a.money.transactions} transactions · ${a.money.due_this_week} due this week`
+        + (a.money.uncategorized ? ` · ${a.money.uncategorized} to sort` : ""));
       if (a.link) add("Link", { cloudflare: "Cloudflare (Gemini)", fallback: "Local backup", local: "Local" }[a.link]);
       body.append(dl);
       if (a.mission) body.append(timeline(a.mission));
@@ -644,6 +649,11 @@
       if (a.id === "architect") {
         const b = el("button", "ghost small", "Check in now"); b.type = "button";
         b.addEventListener("click", () => act("cycle", b));
+        row.append(b);
+      }
+      if (a.id === "finance") {
+        const b = el("button", "small", "Open Finance"); b.type = "button";
+        b.addEventListener("click", () => window.WWFloor.toTactical("finance"));
         row.append(b);
       }
       if (a.id === "forge") {
@@ -691,6 +701,12 @@
             b.addEventListener("click", () => { selected = { type: "agent", id: `splinter-${m.id}` }; openPanel(); });
             body.append(b);
           });
+        }
+        if (r.id === "finance") {
+          body.append(el("p", "muted", "Your money stays on the MSI: only the local model reads it."));
+          const b = el("button", "small", "Open Finance"); b.type = "button";
+          b.addEventListener("click", () => window.WWFloor.toTactical("finance"));
+          body.append(b);
         }
       }
     }
