@@ -89,7 +89,7 @@ def _clip(obj, n=MAX_OBSERVATION) -> str:
 
 class Agent:
     def __init__(self, name: str, persona: str, toolbox: Toolbox, ask: Callable[[str, str, int], str],
-                 approvals=None, events=None, max_steps: int = 8):
+                 approvals=None, events=None, max_steps: int = 8, step_tokens: int = 900):
         """ask(system, prompt, max_tokens) -> model text."""
         self.name = name
         self.persona = persona
@@ -98,6 +98,7 @@ class Agent:
         self.approvals = approvals
         self.events = events
         self.max_steps = max_steps
+        self.step_tokens = step_tokens
 
     def system(self) -> str:
         return (
@@ -133,7 +134,7 @@ class Agent:
         steps: list[Step] = []
         bad = 0
         for _ in range(self.max_steps):
-            raw = self.ask(self.system(), self._transcript(goal, context, steps), 900)
+            raw = self.ask(self.system(), self._transcript(goal, context, steps), self.step_tokens)
             d = parse_decision(raw)
             if "done" in d:
                 return AgentRun(final=str(d.get("done") or "").strip(), steps=steps, finished=True)
@@ -153,7 +154,7 @@ class Agent:
             steps.append(Step(thought=thought, tool=tool_name, args=args, observation=obs))
         # Out of steps: ask once more for a final summary without tools.
         raw = self.ask(self.system(), self._transcript(goal, context, steps)
-                       + "\nYou're out of steps. Finish now with done and a short report of what you did.", 600)
+                       + "\nYou're out of steps. Finish now with done and a short report of what you did.", max(600, self.step_tokens // 2))
         d = parse_decision(raw)
         final = str(d.get("done") or "").strip() or "Ran out of steps before finishing."
         return AgentRun(final=final, steps=steps, finished=False)

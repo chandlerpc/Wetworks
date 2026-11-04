@@ -5,10 +5,10 @@ from typing import Callable
 Ask = Callable[[str, str, int], str]
 
 
-def make_ask(settings, llm, agent: str = "agent") -> Ask:
-    """The default brain: the free local model, or Claude when WETWORKS_AGENT_BRAIN=claude-api."""
+def make_ask(settings, llm, agent: str = "agent", brain: str | None = None) -> Ask:
+    """The default brain: the free local model, or Claude when the brain is claude-api."""
     def ask(system: str, prompt: str, max_tokens: int) -> str:
-        if settings.agent_brain == "claude-api":
+        if (brain or settings.agent_brain) == "claude-api":
             return llm.ask(agent, prompt, tier="think", system=system, max_tokens=max_tokens).text
         return llm.ask_local(agent, prompt, system=system, json_mode=True, max_tokens=max_tokens).text
     return ask

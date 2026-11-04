@@ -151,21 +151,27 @@ def build(settings):
     approvals.executors["adopt_observation"] = adopt_observation
     followups = Followups(settings.data_dir / "agents.db")
 
-    agent_ask = recorded(make_ask(settings, architect.llm, "architect"), traces, "architect", default_brain)
+    arch_brain = settings.architect_brain_effective
+    on_claude = arch_brain == "claude-api"
+    agent_ask = recorded(make_ask(settings, architect.llm, "architect", brain=arch_brain), traces, "architect",
+                         lambda: "claude" if on_claude else "local")
 
     toolbox = build_toolbox(llm=architect.llm, memory=memory, missions=missions, open_mission=open_mission,
                             findings=architect.findings, leads=leads, revenue=revenue, notify=architect.notify,
                             followups=followups, workspace=coder.ws, daily_mission_cap=settings.agent_daily_missions,
                             chats=chats, forge=forge, finance=finance,
-                            finance_level=finance_level(settings, finance, cloud=settings.agent_brain != "local"),
-                            dayjob=dayjob, dayjob_local=settings.agent_brain == "local",
-                            observer=observer, observer_local=settings.agent_brain == "local", content=content)
+                            finance_level=finance_level(settings, finance, cloud=arch_brain != "local"),
+                            dayjob=dayjob, dayjob_local=arch_brain == "local",
+                            observer=observer, observer_local=arch_brain == "local", content=content)
     for name in ("merge_pull_request", "switch_local_model"):
         if name in toolbox.tools:
             approvals.executors[name] = toolbox.tools[name].fn
     commander = Commander(toolbox=toolbox, ask=agent_ask, approvals=approvals, followups=followups,
                           events=architect.events, context_fn=architect.context_block, memory=memory,
-                          max_steps=settings.agent_max_steps, paused=architect.llm.paused)
+                          max_steps=settings.architect_claude_steps if on_claude else settings.agent_max_steps,
+                          chat_steps=settings.architect_claude_chat_steps if on_claude else 5,
+                          step_tokens=settings.architect_claude_step_tokens if on_claude else 900,
+                          paused=architect.llm.paused, uses_gpu=not on_claude)
     comms.architect_agent = commander.chat
 
     # C.L.a.i.R: her own toolbox (missions she opens report back to her), Gemini brain with local backup.

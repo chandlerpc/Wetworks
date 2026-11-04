@@ -46,14 +46,15 @@ def floor_state(*, settings, architect, comms, events, scheduler=None, missions=
     paused = llm.paused.is_set()
     halted = bool(halt and halt.is_set())
     local = llm.ollama.model
-    brain = "Claude" if settings.agent_brain == "claude-api" else local
+    arch_claude = settings.architect_brain_effective == "claude-api"
+    brain = f"Claude ({settings.model_think})" if arch_claude else local
 
     def state(source, sleeper=False):
         if source in errored:
             return "blocked"
         if source in busy:
             return "thinking" if source in ("architect", "clair") else "working"
-        if paused and source not in ("clair", "forge"):
+        if paused and source not in ("clair", "forge") and not (source == "architect" and arch_claude):
             return "asleep"  # The Forge has the GPU
         return "asleep" if sleeper else "idle"
 
@@ -64,7 +65,7 @@ def floor_state(*, settings, architect, comms, events, scheduler=None, missions=
     agents = [
         {"id": "architect", "name": "The Architect", "role": "Overseer", "room": "command", "kind": "commander",
          "state": "blocked" if pending and "architect" not in busy else state("architect"),
-         "vendor": "anthropic" if settings.agent_brain == "claude-api" else "local", "model": brain,
+         "vendor": "anthropic" if arch_claude else "local", "model": brain,
          "next": _iso(nxt.get("commander")), "last": last("architect"),
          "waiting_on_you": len(pending)},
         {"id": "clair", "name": "C.L.a.i.R", "role": "Comms", "room": "comms", "kind": "assistant",

@@ -193,3 +193,19 @@ def test_parse_decision():
     assert parse_decision('```json\n{"done": "x"}\n```') == {"done": "x"}
     assert parse_decision("I think {\"tool\": \"a\"} works") == {"tool": "a"}
     assert parse_decision("nope") == {}
+
+
+def test_architect_can_think_on_claude_while_cells_stay_local(tmp_path):
+    from wetworks.config import Settings
+    from wetworks.main import build
+
+    s = Settings(dry_run=True, data_dir=tmp_path, config_dir="config", architect_brain="claude-api")
+    architect, cells, comms = build(s)
+    c = comms.commander
+    assert (c.max_steps, c.chat_steps, c.step_tokens, c.uses_gpu) == (14, 10, 3500, False)
+    assert c.ask("sys", "hello", 50).startswith("[dry-run claude-opus-5-5]")         # Opus for The Architect
+    assert "[dry-run local:" in cells["intel"].ctx.ask("sys", "hello", 50)               # cells stay free
+    assert "aren't shared" in c.toolbox.tools["finance_summary"].fn()                 # private data stays local
+    assert "isn't shared" in c.toolbox.tools["dayjob_search"].fn(query="x")
+    architect.llm.paused.set()                                                         # Forge training
+    assert "Skipped" not in c.cycle("manual")

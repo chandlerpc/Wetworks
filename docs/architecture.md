@@ -385,6 +385,16 @@ have `search_past_chats` and `read_past_chat`.
 - Agents can list ideas and add new ones (any brain: titles only); drafting stays local.
 - Console Content tab; Content room unsealed on the Floor. Only Game Dev stays sealed.
 
+## Milestone 23: The Architect on Claude
+
+- `architect_brain` (default: same as `agent_brain`) lets The Architect alone think on Claude (`think`
+  tier, Opus) while cells, Splinters and C.L.a.i.R stay on their own brains.
+- On Claude he gets more room: 14 steps per command cycle, 10 per chat reply, 3,500 tokens per step;
+  he no longer pauses while The Forge trains (he doesn't need the GPU). His decisions are recorded as
+  `claude` teacher lessons for The Forge.
+- Private rooms stay closed to him while he's on a cloud brain (finance only if `share_with_cloud`;
+  Day Job and The Observer never). Spend goes through the ledger and stops at the monthly budget.
+
 ## Next milestones
 
 1. Claude powering the agents and the Code cell (Friday).

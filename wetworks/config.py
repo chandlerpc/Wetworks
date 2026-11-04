@@ -79,6 +79,16 @@ class Settings(BaseSettings):
     # commander_every_hours during commander_hours (local time), and after missions finish.
     agent_brain: str = "local"
     agent_max_steps: int = 8
+    # The Architect can think on his own brain. "" = same as agent_brain. claude-api uses the think tier
+    # (Opus) with room for longer plans; every call is priced in the ledger and stops at the monthly budget.
+    architect_brain: str = ""
+    architect_claude_steps: int = 14     # steps per command cycle on Claude
+    architect_claude_chat_steps: int = 10  # steps per chat reply on Claude
+    architect_claude_step_tokens: int = 3500
+
+    @property
+    def architect_brain_effective(self) -> str:
+        return self.architect_brain or self.agent_brain
     commander_hours: str = "8-22"
     commander_every_hours: int = 2
     agent_daily_missions: int = 6

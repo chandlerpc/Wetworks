@@ -43,7 +43,7 @@ Keep it to a few sentences unless he asks for more. Your done text is the reply 
 
 class Commander:
     def __init__(self, *, toolbox, ask, approvals, followups, events, context_fn, memory, max_steps=8,
-                 min_gap_minutes=15, paused=None):
+                 min_gap_minutes=15, paused=None, chat_steps=5, step_tokens=900, uses_gpu=True):
         self.paused = paused  # threading.Event set while The Forge trains
         self.halt = None      # wetworks.halt.Halt
         self.toolbox = toolbox
@@ -54,6 +54,9 @@ class Commander:
         self.context_fn = context_fn
         self.memory = memory
         self.max_steps = max_steps
+        self.chat_steps = chat_steps
+        self.step_tokens = step_tokens
+        self.uses_gpu = uses_gpu  # on Claude he doesn't need the GPU, so Forge training doesn't pause him
         self.min_gap = min_gap_minutes * 60
         self.last_cycle = 0.0
         self.lock = threading.Lock()
@@ -61,7 +64,7 @@ class Commander:
 
     def agent(self, steps: int | None = None) -> Agent:
         return Agent("architect", PERSONA, self.toolbox, self.ask, approvals=self.approvals,
-                     events=self.events, max_steps=steps or self.max_steps)
+                     events=self.events, max_steps=steps or self.max_steps, step_tokens=self.step_tokens)
 
     def _context(self, query: str = "") -> str:
         parts = [self.context_fn()]
@@ -84,7 +87,7 @@ class Commander:
         try:
             if time.monotonic() - self.last_cycle < self.min_gap and reason != "manual":
                 return "Skipped: a cycle ran recently."
-            if self.paused is not None and self.paused.is_set():
+            if self.uses_gpu and self.paused is not None and self.paused.is_set():
                 return "Skipped: The Forge is training on the GPU."
             if self.halt is not None and self.halt.is_set() and reason != "manual":
                 return "Skipped: Wetworks is halted."
@@ -121,6 +124,6 @@ class Commander:
     def chat(self, history: list[dict]) -> str:
         transcript = "\n".join(f"{'Patrick' if m['sender'] == 'patrick' else 'You'}: {m['text']}" for m in history[-12:])
         latest = next((m["text"] for m in reversed(history) if m["sender"] == "patrick"), "")
-        run = self.agent(steps=5).run(CHAT_GOAL.format(transcript=transcript), self._context(latest))
+        run = self.agent(steps=self.chat_steps).run(CHAT_GOAL.format(transcript=transcript), self._context(latest))
         return run.final or "I couldn't put an answer together just then. Ask me again?"
 
