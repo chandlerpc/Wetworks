@@ -43,7 +43,25 @@ something, make a plan, compare things), open a mission instead of doing it in c
 Use kind "code" only when Patrick asks to change Wetworks' own code (fix a bug, add a feature, change
 how the console or an agent works); code missions open a pull request for him to review.
 Only open a mission for a new request; don't reopen one that's already queued or running.
-Small talk, questions about status, and quick answers you can give from the status above are not missions."""
+Small talk, questions about status, and quick answers you can give from the status above are not missions.
+If Patrick tells you something worth remembering long-term (a preference, a decision, a fact about him,
+his business, a project or someone he works with), or asks you to remember something, add
+"remember": ["the fact, in one plain sentence"]. Never remember passwords, keys, account numbers or
+health details. Leave "remember" out otherwise."""
+
+
+def parse_remember(text: str) -> list[str]:
+    """Pull an optional "remember" list out of a JSON reply."""
+    m = re.search(r"\{.*\}", text or "", re.S)
+    for c in ([text] + ([m.group(0)] if m else [])):
+        try:
+            data = json.loads(c)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if isinstance(data, dict):
+            items = data.get("remember") or []
+            return [str(x).strip() for x in items if isinstance(x, str) and str(x).strip()][:3] if isinstance(items, list) else []
+    return []
 
 
 def parse_reply(text: str) -> tuple[str, dict | None]:
@@ -67,7 +85,7 @@ def parse_reply(text: str) -> tuple[str, dict | None]:
 
 
 class Comms:
-    def __init__(self, path: Path, llm, events, context_fn, open_mission=None, bridge=None):
+    def __init__(self, path: Path, llm, events, context_fn, open_mission=None, bridge=None, memory=None):
         """context_fn() returns a text block of current status and findings for the model.
 
         open_mission(title, request, source) queues a mission and returns it (dict with "id").
@@ -91,6 +109,7 @@ class Comms:
         self.llm = llm
         self.events = events
         self.context_fn = context_fn
+        self.memory = memory
 
     def _insert(self, channel: str, sender: str, text: str) -> int:
         with self.lock:
@@ -130,8 +149,11 @@ class Comms:
             transcript = "\n".join(
                 f"{'Patrick' if m['sender'] == 'patrick' else m['sender']}: {m['text']}" for m in history
             )
+            latest = next((m["text"] for m in reversed(history) if m["sender"] == "patrick"), "")
+            recall = self.memory.context_for(latest) if self.memory else ""
+            status = self.context_fn() + (f"\n\n{recall}" if recall else "")
             prompt = (
-                f"Current Wetworks status:\n{self.context_fn()}\n\n"
+                f"Current Wetworks status:\n{status}\n\n"
                 f"Conversation so far:\n{transcript}\n\n"
                 "Reply to Patrick's latest message.\n\n" + (REPLY_FORMAT if self.open_mission else "")
             )
@@ -140,7 +162,7 @@ class Comms:
                 bridged = None
                 if channel == "clair" and self.bridge:
                     try:
-                        bridged = self.bridge.ask(history, self.context_fn())
+                        bridged = self.bridge.ask(history, status)
                         self.llm.ledger.record_cost("comms:clair", "gemini:clair-worker", 0, 0, 0.0)
                         if self.clair_mode != "cloudflare":
                             self.events.add("clair", "info", "Back on Cloudflare")
@@ -159,6 +181,10 @@ class Comms:
                         reply = self.llm.ask(f"comms:{channel}", prompt, tier="work", system=PERSONAS[channel],
                                              max_tokens=700)
                     text, mission = parse_reply(reply.text) if json_mode else (reply.text.strip(), None)
+                    if json_mode and self.memory:
+                        for fact in parse_remember(reply.text):
+                            if self.memory.add(fact, source=f"chat:{channel}"):
+                                self.events.add(channel, "info", f"Remembered: {fact[:120]}")
                 if mission and self.open_mission:
                     kind = "code" if str(mission.get("kind", "")).lower() == "code" else "research"
                     m = self.open_mission(str(mission.get("title", "")), str(mission["request"]), channel, kind)
@@ -169,6 +195,16 @@ class Comms:
                 text = f"Comms down: {type(e).__name__}. The local model may still be loading; try again in a minute."
                 self.events.add(channel, "error", f"Reply failed: {e}")
             self._insert(channel, channel, text)
+
+    def messages_since(self, since_iso: str, sender: str | None = None) -> list[dict]:
+        q = "SELECT id, ts, channel, sender, text FROM messages WHERE ts >= ?"
+        args = [since_iso]
+        if sender:
+            q += " AND sender = ?"
+            args.append(sender)
+        with self.lock:
+            rows = self.db.execute(q + " ORDER BY id", args).fetchall()
+        return [dict(zip(("id", "ts", "channel", "sender", "text"), r)) for r in rows]
 
     def mission_report(self, mission: dict) -> None:
         """Post a finished mission back into the channel that opened it."""

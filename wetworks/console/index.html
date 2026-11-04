@@ -69,6 +69,21 @@
         <p id="action-note" class="note" role="status"></p>
       </div>
 
+      <div class="block memory-block">
+        <h3>Memory</h3>
+        <p id="mem-count" class="note"></p>
+        <form id="mem-search" class="mem-row" role="search">
+          <label for="mem-q" class="sr-only">Search memory</label>
+          <input id="mem-q" type="search" placeholder="Search what Wetworks knows">
+        </form>
+        <ul id="mem-list" class="mem-list"></ul>
+        <form id="mem-add" class="mem-row">
+          <label for="mem-text" class="sr-only">Something to remember</label>
+          <input id="mem-text" placeholder="Teach it something new">
+          <button type="submit" class="small">Remember</button>
+        </form>
+      </div>
+
       <div class="block feed-block">
         <h3>Activity</h3>
         <ul id="feed" class="feed mono" aria-live="polite"></ul>

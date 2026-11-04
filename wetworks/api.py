@@ -55,7 +55,7 @@ def _iso(dt) -> str | None:
 
 
 def create_app(*, settings, architect, cells: dict, comms, events, scheduler=None,
-               missions=None, open_mission=None, voice=None, leads=None) -> Starlette:
+               missions=None, open_mission=None, voice=None, leads=None, memory=None) -> Starlette:
     def run_bg(fn):
         threading.Thread(target=fn, daemon=True).start()
 
@@ -232,6 +232,28 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
             return JSONResponse({"error": "Couldn't write a draft just now. Try again in a minute."}, status_code=502)
         return JSONResponse(leads.get(lead["id"]))
 
+    async def list_memory(request: Request):
+        if memory is None:
+            return JSONResponse({"memories": [], "count": 0})
+        q = request.query_params.get("q", "").strip()
+        rows = memory.search(q, limit=50, include_pinned=True) if q else memory.recent(200)
+        return JSONResponse({"memories": rows, "count": memory.count()})
+
+    async def add_memory(request: Request):
+        if memory is None:
+            return JSONResponse({"error": "Memory isn't available."}, status_code=503)
+        body = await request.json()
+        m = memory.add(str(body.get("text", "")), kind=str(body.get("kind", "fact")), source="console")
+        if not m:
+            return JSONResponse({"error": "That's empty or already remembered."}, status_code=400)
+        events.add("architect", "info", f"Remembered: {m['text'][:120]}")
+        return JSONResponse(m, status_code=201)
+
+    async def forget_memory(request: Request):
+        if memory is None or not memory.forget(int(request.path_params["mid"])):
+            return JSONResponse({"error": "Nothing to forget with that number."}, status_code=404)
+        return JSONResponse({"ok": True})
+
     async def index(request: Request):
         v = _asset_version()
         html = (CONSOLE_DIR / "index.html").read_text()
@@ -250,6 +272,9 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
         Route("/api/voice", voice_config, methods=["GET"]),
         Route("/api/voice/transcribe", voice_transcribe, methods=["POST"]),
         Route("/api/voice/say", voice_say, methods=["POST"]),
+        Route("/api/memory", list_memory, methods=["GET"]),
+        Route("/api/memory", add_memory, methods=["POST"]),
+        Route("/api/memory/{mid:int}", forget_memory, methods=["DELETE"]),
         Route("/api/leads", list_leads, methods=["GET"]),
         Route("/api/leads/{lid:int}", update_lead, methods=["POST"]),
         Route("/api/leads/{lid:int}/draft", redraft_lead, methods=["POST"]),

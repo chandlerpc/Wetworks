@@ -17,6 +17,8 @@ from .architect import Architect
 from .bridge import ClairBridge
 from .cells.base import CellContext
 from .cells.intel import Intel
+from .cells.learner import Learner
+from .memory import Memory
 from .cells.revenue import Revenue
 from .leads import LeadStore
 from .cells.coder import Coder
@@ -39,7 +41,11 @@ def _cron(hhmm: str, tz: str) -> CronTrigger:
 
 def build(settings):
     architect = Architect(settings)
-    ctx = CellContext(settings=settings, llm=architect.llm, findings=architect.findings, events=architect.events)
+    memory = Memory(settings.data_dir / "memory.db")
+    loaded = memory.sync_profile(settings.config_dir / "profile.md")
+    log.info("Memory: %d profile lines, %d memories total", loaded, memory.count())
+    ctx = CellContext(settings=settings, llm=architect.llm, findings=architect.findings, events=architect.events,
+                      memory=memory)
     intel = Intel(ctx)
     leads = LeadStore(settings.data_dir / "leads.db")
     revenue = Revenue(ctx, leads)
@@ -62,11 +68,12 @@ def build(settings):
 
     bridge = ClairBridge(settings.clair_url, settings.clair_token, owner=settings.owner_name)
     comms = Comms(settings.data_dir / "comms.db", architect.llm, architect.events, architect.context_block,
-                  open_mission=open_mission, bridge=bridge)
+                  open_mission=open_mission, bridge=bridge, memory=memory)
     operator.on_done = comms.mission_report
     comms.missions, comms.operator, comms.open_mission_fn = missions, operator, open_mission
     comms.leads = leads
-    return architect, {"intel": intel, "revenue": revenue}, comms
+    learner = Learner(ctx, comms, missions)
+    return architect, {"intel": intel, "revenue": revenue, "learner": learner}, comms
 
 
 def run() -> None:
@@ -99,6 +106,7 @@ def run() -> None:
     sleepers.register(cells["intel"], [settings.morning_brief, settings.evening_brief],
                       lead_minutes=settings.intel_lead_minutes)
     sleepers.register(cells["revenue"], [settings.morning_brief], lead_minutes=settings.revenue_lead_minutes)
+    sleepers.register(cells["learner"], [settings.learner_time])
     sched.start()
     comms.operator.start()
 
@@ -133,7 +141,8 @@ def run() -> None:
 
     app = create_app(settings=settings, architect=architect, cells=cells, comms=comms,
                      events=architect.events, scheduler=sched, missions=comms.missions,
-                     open_mission=comms.open_mission_fn, voice=Voice(settings, architect.ledger), leads=comms.leads)
+                     open_mission=comms.open_mission_fn, voice=Voice(settings, architect.ledger), leads=comms.leads,
+                     memory=comms.memory)
     log.info("Console listening on port %d", settings.console_port)
     uvicorn.run(app, host="0.0.0.0", port=settings.console_port, log_level="warning")
     sched.shutdown(wait=False)

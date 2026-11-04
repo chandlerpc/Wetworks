@@ -277,6 +277,17 @@ input:focus, textarea:focus { border-color: var(--phosphor-dim); outline: none; 
 .steps-wrap summary { cursor: pointer; font-size: 14px; }
 .steps { margin: var(--s2) 0 0; padding-left: 1.4em; font-size: 12.5px; line-height: 1.6; }
 
+/* ---- Memory ---------------------------------------------------------- */
+.memory-block .note { margin: 0 0 var(--s2); }
+.mem-row { display: flex; gap: var(--s2); margin: var(--s2) 0; }
+.mem-row input { padding: 10px 12px; font-size: 15px; }
+.mem-list { list-style: none; margin: 0; padding: 0; max-height: 34vh; overflow-y: auto; border-top: 1px solid var(--seam); }
+.mem-list li { display: flex; gap: var(--s3); align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--seam); font-size: 14.5px; }
+.mem-list .mem-text { flex: 1; }
+.mem-list .mem-src { display: block; font-size: 12px; color: var(--fog); margin-top: 2px; }
+.mem-list .pin { color: var(--phosphor); }
+.mem-list button { min-height: 32px; padding: 4px 10px; font-size: 12.5px; }
+
 /* ---- Leads ----------------------------------------------------------- */
 .leads-head { display: flex; justify-content: space-between; align-items: center; gap: var(--s3); margin-bottom: var(--s3); }
 .leads-head .note { margin: 0; }

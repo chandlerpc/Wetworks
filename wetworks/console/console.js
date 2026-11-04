@@ -18,7 +18,7 @@
   let findingsCache = [];
   const timers = [];
 
-  const NAMES = { architect: "The Architect", clair: "C.L.a.i.R", intel: "Intel", revenue: "Revenue", splinter: "Splinter", patrick: "You", console: "You" };
+  const NAMES = { architect: "The Architect", clair: "C.L.a.i.R", intel: "Intel", revenue: "Revenue", learner: "Learner", splinter: "Splinter", patrick: "You", console: "You" };
   const STATUS = { queued: "Queued", running: "Running", done: "Done", failed: "Failed", cancelled: "Cancelled" };
   let openMission = null;
   const JOBS = {
@@ -75,7 +75,7 @@
 
     // Splinter teams work under The Architect, so they light his lens
     const busy = (a) => s.busy.includes(a) || (a === "architect" && s.busy.includes("splinter"))
-      || (a === "intel" && s.busy.includes("revenue"));  // Sleepers share the right-hand lens
+      || (a === "intel" && (s.busy.includes("revenue") || s.busy.includes("learner")));  // Sleepers share the right-hand lens
     $$(".topbar .lens").forEach((l) => {
       l.classList.toggle("busy", busy(l.dataset.agent));
       l.classList.toggle("on", !busy(l.dataset.agent));
@@ -348,6 +348,45 @@
     } finally { btn.disabled = false; }
   }
 
+  // ---- Memory ---------------------------------------------------------
+  const SRC = { profile: "Profile", console: "You, here", nightly: "Learned overnight", "chat:clair": "From C.L.a.i.R chat", "chat:architect": "From The Architect chat" };
+  async function loadMemory() {
+    const q = $("#mem-q").value.trim();
+    const { memories, count } = await api(`/api/memory${q ? `?q=${encodeURIComponent(q)}` : ""}`);
+    $("#mem-count").textContent = `${count} thing${count === 1 ? "" : "s"} remembered`;
+    const list = $("#mem-list");
+    list.replaceChildren();
+    const rows = q ? memories : memories.filter((m) => !m.pinned).slice(0, 25);
+    if (!rows.length) {
+      list.append(el("li", "note", q ? "Nothing matches that." : "Nothing learned yet beyond your profile. It learns from chats overnight, or teach it below."));
+      return;
+    }
+    rows.forEach((m) => {
+      const li = el("li");
+      const t = el("span", "mem-text", m.text);
+      t.append(el("span", `mem-src${m.pinned ? " pin" : ""}`, `${SRC[m.source] || m.source} · ${ago(m.created)}`));
+      li.append(t);
+      if (!m.pinned) {
+        const b = el("button", "ghost", "Forget"); b.type = "button";
+        b.addEventListener("click", async () => {
+          b.disabled = true;
+          try { await api(`/api/memory/${m.id}`, { method: "DELETE" }); safe(loadMemory)(); }
+          catch (err) { if (err.message !== "unauthorized") alert(err.message); b.disabled = false; }
+        });
+        li.append(b);
+      }
+      list.append(li);
+    });
+  }
+  async function addMemory(e) {
+    e.preventDefault();
+    const box = $("#mem-text");
+    const text = box.value.trim();
+    if (!text) return;
+    try { await api("/api/memory", { method: "POST", body: JSON.stringify({ text }) }); box.value = ""; safe(loadMemory)(); }
+    catch (err) { if (err.message !== "unauthorized") alert(err.message); }
+  }
+
   // ---- Leads ----------------------------------------------------------
   const LEAD_STATUS = { new: "New", contacted: "Contacted", replied: "Replied", won: "Won", lost: "Lost", dismissed: "Not a fit" };
   let leadFilter = "";
@@ -473,7 +512,7 @@
     showPane(store.get("wetworks.pane") || "ops");
     selectChannel(channel);
     const s = safe(loadStatus), ev = safe(loadEvents), m = safe(loadMessages), f = safe(loadFindings), mi = safe(loadMissions), le = safe(loadLeads);
-    s(); ev(); f(); mi(); le();
+    s(); ev(); f(); mi(); le(); safe(loadMemory)();
     timers.push(setInterval(le, 30000));
     if (window.WWVoice) window.WWVoice.init();
     timers.push(setInterval(s, 8000), setInterval(ev, 4000), setInterval(m, 2500), setInterval(f, 30000), setInterval(mi, 5000));
@@ -529,6 +568,10 @@
   $$(".tabs button").forEach((b) => b.addEventListener("click", () => showPane(b.dataset.pane)));
   $$("[data-action]").forEach((b) => b.addEventListener("click", () => runAction(b)));
   $("#new-mission").addEventListener("submit", startMission);
+  $("#mem-add").addEventListener("submit", addMemory);
+  $("#mem-search").addEventListener("submit", (e) => { e.preventDefault(); safe(loadMemory)(); });
+  let memT = null;
+  $("#mem-q").addEventListener("input", () => { clearTimeout(memT); memT = setTimeout(() => safe(loadMemory)(), 300); });
   $$(".kind").forEach((b) => b.addEventListener("click", () => setKind(b.dataset.kind)));
   $("#ms-close").addEventListener("click", () => $("#mission-sheet").close());
   $("#mission-sheet").addEventListener("close", () => { openMission = null; });

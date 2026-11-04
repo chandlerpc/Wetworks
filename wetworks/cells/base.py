@@ -17,6 +17,7 @@ class CellContext:
     llm: LLM
     findings: FindingsStore
     events: EventLog | None = None
+    memory: object | None = None  # wetworks.memory.Memory
 
 
 class Cell(ABC):

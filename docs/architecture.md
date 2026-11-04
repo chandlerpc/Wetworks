@@ -167,9 +167,23 @@ Other vendors (Gemini, Grok, OpenAI) plug in behind the same `LLM` interface lat
 - Job-board pages are kept as evidence but never used to identify a business, so different
   businesses posting on the same job board aren't merged.
 
+## Milestone 9: Memory
+
+- `wetworks/memory.py`: SQLite with full-text search (no model, no GPU).
+- `config/profile.md`: who Patrick is, his business, skills and preferences. Loaded on start as
+  pinned memories that every agent sees.
+- Chat: C.L.a.i.R and The Architect recall memories related to each message, and can add a
+  "remember" item when Patrick states something durable or asks them to remember.
+- Missions: Splinter write-ups are tailored with the profile and related memories.
+- Learner (Sleeper, 23:30 nightly): extracts durable facts Patrick stated in the day's chats and
+  missions (skipping temporary and sensitive things), and archives mission details older than a
+  year, with a heads-up in the brief the week before.
+- Console: Memory section in Ops to search, teach and forget.
+
 ## Next milestones
 
 1. Claude Code brain on the Max plan (Friday).
+2. One-time import of Mac notes and documents into memory.
 2. Revenue follow-ups: reminders for contacted leads, and a Splinter that researches a lead
    in depth before you reach out (Sleeper), fed by Intel's money findings.
 3. C.L.a.i.R bridge: The Architect ↔ Cloudflare Worker.

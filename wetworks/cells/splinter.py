@@ -37,6 +37,8 @@ WRITE_PROMPT = """Mission: {title}
 Patrick's request:
 {request}
 
+{known}
+
 What to deliver: {deliverable}
 
 {sources_block}
@@ -119,6 +121,10 @@ class Splinter:
 
         # 3. Write
         self._step(mid, "Writing it up")
+        mem = getattr(self.ctx, "memory", None)
+        recall = mem.context_for(mission["request"], pinned_limit=15, related_limit=6) if mem else ""
+        known = (f"What you know about Patrick (use it to tailor the answer; don't repeat it back):\n{recall}"
+                 if recall else "")
         if sources:
             blocks = []
             for i, s in enumerate(sources):
@@ -131,7 +137,7 @@ class Splinter:
             cite_rule = "Don't state current facts you can't be sure of; say what Patrick should verify."
         text = self._ask(mid, WRITE_PROMPT.format(title=mission["title"], request=mission["request"],
                                                   deliverable=deliverable, sources_block=sources_block,
-                                                  cite_rule=cite_rule),
+                                                  cite_rule=cite_rule, known=known),
                          json_mode=False, max_tokens=1400).strip()
         if not text:
             raise RuntimeError("The model returned an empty write-up")
