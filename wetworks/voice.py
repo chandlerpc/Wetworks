@@ -13,6 +13,11 @@ import httpx
 
 log = logging.getLogger("wetworks.voice")
 
+# Words Whisper should expect; names especially are hard without a hint.
+VOCAB_HINT = ("Clair, C.L.a.i.R, The Architect, Wetworks, Splinter, Sleeper, Intel, mission, "
+              "Black Desert, Orlando, Sanford, Lake Mary.")
+KEEP_RECORDINGS = 5
+
 TTS_MODEL_KEY = "azure:tts"  # ledger row name; characters are stored in input_tokens
 MAX_SPOKEN_CHARS = 700
 
@@ -61,10 +66,12 @@ class Voice:
             return ""
         ext = {"audio/mp4": "m4a", "audio/aac": "aac", "audio/ogg": "ogg", "audio/wav": "wav",
                "audio/mpeg": "mp3"}.get(content_type.split(";")[0].strip(), "webm")
+        self._keep(audio, ext)
         try:
             r = httpx.post(
                 f"{self.s.whisper_url.rstrip('/')}/asr",
-                params={"task": "transcribe", "language": "en", "output": "json", "encode": "true"},
+                params={"task": "transcribe", "language": "en", "output": "json", "encode": "true",
+                        "vad_filter": "true", "initial_prompt": VOCAB_HINT},
                 files={"audio_file": (f"speech.{ext}", audio, content_type)},
                 timeout=60,
             )
@@ -73,6 +80,19 @@ class Voice:
             raise VoiceError(f"Whisper isn't answering ({type(e).__name__})") from e
         data = r.json()
         return str(data.get("text", "")).strip()
+
+    def _keep(self, audio: bytes, ext: str) -> None:
+        """Keep the last few recordings in /data/voice so they can be played back when debugging."""
+        try:
+            d = self.s.data_dir / "voice"
+            d.mkdir(parents=True, exist_ok=True)
+            for old in sorted(d.glob("heard-*"))[: -(KEEP_RECORDINGS - 1) or None]:
+                old.unlink(missing_ok=True)
+            import time
+
+            (d / f"heard-{time.time_ns():020d}.{ext}").write_bytes(audio)
+        except OSError as e:
+            log.info("Couldn't keep recording: %s", e)
 
     # ---- speaking ----------------------------------------------------------
     @property

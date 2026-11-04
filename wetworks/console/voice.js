@@ -129,7 +129,7 @@ if (typeof window !== "undefined") (() => {
   // ---- Audio in ----
   async function openMic() {
     if (stream) return stream;
-    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: true } });
     return stream;
   }
   function closeMic() {

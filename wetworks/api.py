@@ -140,10 +140,12 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
         if len(audio) > 12_000_000:
             return JSONResponse({"error": "That recording is too long."}, status_code=413)
         try:
-            text = await run_in_threadpool(voice.transcribe, audio, request.headers.get("content-type", "audio/webm"))
+            ctype = request.headers.get("content-type", "audio/webm")
+            text = await run_in_threadpool(voice.transcribe, audio, ctype)
         except Exception as e:
             events.add("clair", "warn", f"Couldn't transcribe: {e}")
             return JSONResponse({"error": "Couldn't make out the recording. Whisper may still be starting."}, status_code=502)
+        events.add("clair", "info", f'Heard ({len(audio) // 1024} KB {ctype.split(";")[0]}): "{text[:120]}"')
         return JSONResponse({"text": text})
 
     async def voice_say(request: Request):

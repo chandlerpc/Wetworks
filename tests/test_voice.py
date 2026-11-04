@@ -101,3 +101,15 @@ def test_wake_and_stop_phrases():
     test = Path(__file__).parent / "voice_phrases.test.js"
     r = subprocess.run(["node", str(test)], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
+
+
+def test_transcribe_hints_vocab_and_keeps_recordings(tmp_path, monkeypatch):
+    v = voice(tmp_path)
+    seen = {}
+    monkeypatch.setattr("wetworks.voice.httpx.post", lambda url, params, files, timeout: seen.update(params=params)
+                        or SimpleNamespace(raise_for_status=lambda: None, json=lambda: {"text": "ok"}))
+    for i in range(7):
+        v.transcribe(f"audio{i}".encode(), "audio/webm")
+    assert seen["params"]["vad_filter"] == "true" and "Clair" in seen["params"]["initial_prompt"]
+    kept = sorted((tmp_path / "voice").glob("heard-*"))
+    assert len(kept) == 5 and kept[-1].read_bytes() == b"audio6"

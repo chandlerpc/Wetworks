@@ -46,7 +46,7 @@ services:
     restart: unless-stopped
     environment:
       ASR_ENGINE: faster_whisper
-      ASR_MODEL: small.en
+      ASR_MODEL: ${WHISPER_MODEL:-small.en}   # small.en, medium.en, distil-large-v3 (more accurate, more GPU memory)
     volumes:
       - whisper-models:/root/.cache
     deploy:
