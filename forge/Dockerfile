@@ -11,4 +11,5 @@ sys.exit(0 if ok else 'The unsloth image changed: unsloth/trl/datasets are not i
 ENV FORGE_DIR=/forge PYTHONUNBUFFERED=1
 WORKDIR /forge
 ENTRYPOINT []
-CMD ["python", "/opt/forge/runner.py"]
+# The architect container (uid 1000) shares /forge, so hand it the folder and keep new files writable.
+CMD ["sh", "-c", "chown -R 1000:1000 /forge && umask 000 && exec python /opt/forge/runner.py"]

@@ -43,7 +43,11 @@ class Forge:
         self.dir = data_dir            # /data/forge in this container == /forge in the forge container
         self.runner = runner_url.rstrip("/")
         self.ollama = ollama_url.rstrip("/")
-        (self.dir / "datasets").mkdir(parents=True, exist_ok=True)
+        try:
+            (self.dir / "datasets").mkdir(parents=True, exist_ok=True)
+        except PermissionError as e:
+            raise SystemExit(f"Can't write to {self.dir} ({e}). The forge container fixes this folder's owner "
+                             "when it starts; run `docker compose up -d forge` and the architect will retry.") from e
         self.db = sqlite3.connect(self.dir / "forge.db", check_same_thread=False)
         self.lock = threading.Lock()
         self.db.executescript("""

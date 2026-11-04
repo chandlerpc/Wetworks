@@ -89,6 +89,7 @@ services:
       dockerfile: forge/Dockerfile
     container_name: wetworks-forge
     restart: unless-stopped
+    user: "0:0"
     ipc: host
     ulimits:
       memlock: -1

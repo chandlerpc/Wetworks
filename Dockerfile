@@ -10,7 +10,7 @@ COPY wetworks ./wetworks
 COPY config ./config
 RUN pip install --no-cache-dir .
 
-RUN useradd -u 1000 -m architect && mkdir -p /data/sandbox-runs /data/workspaces && chown -R architect /data
+RUN useradd -u 1000 -m architect && mkdir -p /data/sandbox-runs /data/workspaces /data/forge && chown -R architect /data
 USER architect
 
 CMD ["python", "-m", "wetworks.main"]
