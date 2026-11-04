@@ -96,6 +96,7 @@ def build(settings):
                   open_mission=open_mission, bridge=bridge, memory=memory)
     operator.on_done = comms.mission_report
     comms.missions, comms.operator, comms.open_mission_fn = missions, operator, open_mission
+    revenue.open_mission = lambda title, request, source: open_mission(title, request, source)
     comms.leads = leads
     learner = Learner(ctx, comms, missions)
 
@@ -143,6 +144,8 @@ def build(settings):
     previous_done = operator.on_done
 
     def on_done(m: dict) -> None:
+        if revenue.mission_finished(m):  # lead research: the Revenue cell files it and drafts outreach
+            return
         previous_done(m)
         commander.on_mission_done(m)  # The Architect reviews finished work and decides next steps
 

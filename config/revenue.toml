@@ -13,6 +13,14 @@ draft_min_fit = 4          # only draft outreach for leads this good (1-5)
 max_drafts = 4             # per run
 queries_per_run = 4        # rotates through the list below so each run looks somewhere new
 
+# Before drafting, a Splinter researches each strong lead (free, local). Drafts wait for it.
+research_before_outreach = true
+research_per_run = 2       # missions per morning run; you can send more from Leads
+
+# After you mark a lead Contacted: days until follow-up 1, then until follow-up 2.
+# Wetworks reminds you in the brief and drafts the follow-up; you send it.
+followup_days = [4, 7]
+
 # What you sell. The cell matches each lead to one of these.
 services = [
   "AI chatbot for websites and booking (answers questions, takes appointments 24/7)",

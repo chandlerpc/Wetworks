@@ -435,6 +435,11 @@
     const running = h.missions.filter((m) => m.status === "running").length, queued = h.missions.length - running;
     $("#fh-missions").textContent = h.missions.length ? `${running} running · ${queued} queued` : "No missions running";
     const g = h.gpu || {};
+    const ls = g.lessons;
+    $("#fh-lessons").textContent = !ls ? "Forge offline"
+      : ls.have >= ls.needed ? `${ls.have} banked · ready to train` : `${ls.have} of ${ls.needed} to first training run`;
+    $("#fh-lessons-bar").style.width = ls ? `${Math.min(100, (ls.have / ls.needed) * 100)}%` : "0";
+    $("#fh-lessons-bar").className = ls && ls.have >= ls.needed ? "ready" : "";
     const gpu = g.online ? `GPU ${g.util ?? "–"}% · ${g.temp ?? "–"}°C${g.training ? " · training" : ""}` : "GPU: Forge offline";
     $("#fh-health").textContent = `CPU ${h.host.cpu_percent}% · RAM ${h.host.mem_used_gb}/${h.host.mem_total_gb} GB · ${gpu}`;
     $("#fh-link").textContent = { cloudflare: "C.L.a.i.R on Gemini", fallback: "C.L.a.i.R on local backup", local: "C.L.a.i.R local" }[h.clair_link] || "";
@@ -519,7 +524,7 @@
           const dl = el("dl", "facts");
           [["GPU", g.gpu], ["Load", g.util != null ? `${g.util}%` : null], ["Temperature", g.temp != null ? `${g.temp}°C` : null],
            ["Memory", g.mem_used != null ? `${Math.round(g.mem_used)} of ${Math.round(g.mem_total)} MB` : null],
-           ["Training", g.job ? `${g.job.id}: ${g.job.message}` : (g.queued || []).length ? `${g.queued.length} queued for tonight` : "Nothing running"]]
+           ["Lessons", g.lessons ? `${g.lessons.have} of ${g.lessons.needed} needed` : null], ["Training", g.job ? `${g.job.id}: ${g.job.message}` : (g.queued || []).length ? `${g.queued.length} queued for tonight` : "Nothing running"]]
             .forEach(([k, v]) => { if (v) dl.append(el("dt", null, k), el("dd", null, v)); });
           body.append(dl);
         }

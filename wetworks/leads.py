@@ -3,7 +3,7 @@ contact with a business is Patrick's decision: Wetworks never sends anything its
 
 import sqlite3
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -12,6 +12,10 @@ STATUSES = ("new", "contacted", "replied", "won", "lost", "dismissed")
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _in_days(days: int) -> str:
+    return (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
 
 
 def domain_of(url: str) -> str:
@@ -42,11 +46,19 @@ class LeadStore:
                 notes TEXT NOT NULL DEFAULT ''
             )"""
         )
+        # Added later: follow-ups and pre-outreach research. ALTER keeps older databases working.
+        have = {r[1] for r in self.db.execute("PRAGMA table_info(leads)")}
+        for col, decl in self.EXTRA:
+            if col not in have:
+                self.db.execute(f"ALTER TABLE leads ADD COLUMN {col} {decl}")
         self.db.execute("CREATE INDEX IF NOT EXISTS leads_domain ON leads(domain)")
         self.db.commit()
 
+    EXTRA = (("contacted_at", "TEXT NOT NULL DEFAULT ''"), ("followup_due", "TEXT NOT NULL DEFAULT ''"),
+             ("followups", "INTEGER NOT NULL DEFAULT 0"), ("followup_draft", "TEXT NOT NULL DEFAULT ''"),
+             ("research", "TEXT NOT NULL DEFAULT ''"), ("research_mission", "INTEGER NOT NULL DEFAULT 0"))
     KEYS = ("id", "created", "updated", "business", "url", "domain", "location", "signal", "offer", "why",
-            "fit", "status", "draft", "notes")
+            "fit", "status", "draft", "notes") + tuple(c for c, _ in EXTRA)
 
     def _row(self, r) -> dict:
         return dict(zip(self.KEYS, r))
@@ -103,10 +115,18 @@ class LeadStore:
                     "fit DESC, id DESC LIMIT ?", (limit,)).fetchall()
         return [self._row(r) for r in rows]
 
-    def update(self, lid: int, status: str | None = None, notes: str | None = None, draft: str | None = None) -> dict | None:
+    def update(self, lid: int, status: str | None = None, notes: str | None = None, draft: str | None = None,
+               followup_days: int | None = None) -> dict | None:
+        """followup_days: when a lead first becomes 'contacted', when to suggest following up."""
         if status is not None and status not in STATUSES:
             raise ValueError(f"Unknown status {status!r}")
         sets, vals = [], []
+        old = self.get(lid) if status is not None else None
+        if status == "contacted" and old and old["status"] != "contacted":
+            sets += ["contacted_at = ?", "followup_due = ?", "followups = 0", "followup_draft = ''"]
+            vals += [_now(), _in_days(followup_days) if followup_days else ""]
+        elif status is not None and status != "contacted":
+            sets += ["followup_due = ''", "followup_draft = ''"]  # they replied, or it's closed: stop nudging
         for col, val in (("status", status), ("notes", notes), ("draft", draft)):
             if val is not None:
                 sets.append(f"{col} = ?")
@@ -122,9 +142,66 @@ class LeadStore:
         with self.lock:
             return dict(self.db.execute("SELECT status, COUNT(*) FROM leads GROUP BY status").fetchall())
 
+    def due_count(self) -> int:
+        with self.lock:
+            return self.db.execute(
+                "SELECT COUNT(*) FROM leads WHERE status = 'contacted' AND followup_due != '' AND followup_due <= ?",
+                (_now(),)).fetchone()[0]
+
+    # ---- follow-ups -----------------------------------------------------------------------
+    def due_followups(self, limit: int = 20) -> list[dict]:
+        with self.lock:
+            rows = self.db.execute(
+                "SELECT * FROM leads WHERE status = 'contacted' AND followup_due != '' AND followup_due <= ? "
+                "ORDER BY followup_due LIMIT ?", (_now(), limit)).fetchall()
+        return [self._row(r) for r in rows]
+
+    def followed_up(self, lid: int, next_days: int | None) -> dict | None:
+        """Patrick sent a follow-up. next_days=None means that was the last one."""
+        with self.lock:
+            self.db.execute("UPDATE leads SET followups = followups + 1, followup_draft = '', followup_due = ?, "
+                            "updated = ? WHERE id = ? AND status = 'contacted'",
+                            (_in_days(next_days) if next_days else "", _now(), lid))
+            self.db.commit()
+        return self.get(lid)
+
+    def snooze(self, lid: int, days: int) -> dict | None:
+        with self.lock:
+            self.db.execute("UPDATE leads SET followup_due = ?, updated = ? WHERE id = ? AND status = 'contacted'",
+                            (_in_days(days), _now(), lid))
+            self.db.commit()
+        return self.get(lid)
+
+    def set_followup_draft(self, lid: int, text: str) -> None:
+        with self.lock:
+            self.db.execute("UPDATE leads SET followup_draft = ?, updated = ? WHERE id = ?", (text[:4000], _now(), lid))
+            self.db.commit()
+
+    # ---- research before outreach ------------------------------------------------------------
+    def needing_research(self, min_fit: int, limit: int) -> list[dict]:
+        with self.lock:
+            rows = self.db.execute(
+                "SELECT * FROM leads WHERE status = 'new' AND research_mission = 0 AND research = '' AND fit >= ? "
+                "ORDER BY fit DESC, id DESC LIMIT ?", (min_fit, limit)).fetchall()
+        return [self._row(r) for r in rows]
+
+    def set_research(self, lid: int, mission: int | None = None, text: str | None = None) -> dict | None:
+        sets, vals = [], []
+        if mission is not None:
+            sets.append("research_mission = ?"); vals.append(mission)
+        if text is not None:
+            sets.append("research = ?"); vals.append(text[:8000])
+        if sets:
+            with self.lock:
+                self.db.execute(f"UPDATE leads SET {', '.join(sets)}, updated = ? WHERE id = ?", (*vals, _now(), lid))
+                self.db.commit()
+        return self.get(lid)
+
     def needing_drafts(self, min_fit: int, limit: int) -> list[dict]:
         with self.lock:
             rows = self.db.execute(
-                "SELECT * FROM leads WHERE status = 'new' AND draft = '' AND fit >= ? ORDER BY fit DESC, id DESC LIMIT ?",
+                "SELECT * FROM leads WHERE status = 'new' AND draft = '' AND fit >= ? "
+                "AND (research_mission = 0 OR research != '') "  # wait for pre-outreach research to land
+                "ORDER BY fit DESC, id DESC LIMIT ?",
                 (min_fit, limit)).fetchall()
         return [self._row(r) for r in rows]

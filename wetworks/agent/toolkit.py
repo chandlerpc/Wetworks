@@ -70,10 +70,25 @@ def build_toolbox(*, llm, memory, missions, open_mission, findings, leads, reven
                or "No findings yet."))
 
     def list_leads(status=""):
-        rows = leads.recent(status=status or None, limit=20)
+        rows = leads.due_followups(20) if status == "due" else leads.recent(status=status or None, limit=20)
         return [{"id": l["id"], "business": l["business"], "fit": l["fit"], "offer": l["offer"], "status": l["status"],
-                 "signal": l["signal"][:160], "has_draft": bool(l["draft"]), "notes": l["notes"][:120]} for l in rows] \
-            or "No leads."
+                 "signal": l["signal"][:160], "has_draft": bool(l["draft"]), "notes": l["notes"][:120],
+                 "followup_due": l["followup_due"][:10], "followups_sent": l["followups"],
+                 "research": "running" if l["research_mission"] and not l["research"] else ("ready" if l["research"] else "none")}
+                for l in rows] or "No leads."
+
+    def research_lead(id):
+        l = leads.get(int(id))
+        if not l:
+            return f"No lead #{id}."
+        if l["research_mission"] and not l["research"]:
+            return f"Already being researched in mission #{l['research_mission']}."
+        if len([m for m in missions.recent(50) if m["status"] in ("queued", "running")]) >= 3:
+            return "Three missions are already queued or running. Try again after they finish."
+        leads.set_research(l["id"], text="")
+        m = revenue.research(leads.get(l["id"]))
+        return f"Mission #{m['id']} queued to research {l['business']}. The write-up lands on the lead." if m \
+            else "Missions aren't available right now."
 
     def note_lead(id, notes="", dismiss=False):
         l = leads.get(int(id))
@@ -91,7 +106,9 @@ def build_toolbox(*, llm, memory, missions, open_mission, findings, leads, reven
         return text or "Couldn't write a draft just now."
 
     t.add(Tool("list_leads", "Leads the Revenue cell found (businesses that might hire Patrick).",
-               {"status": "(optional) new | contacted | replied | won | lost"}, list_leads))
+               {"status": "(optional) due (follow-up due) | new | contacted | replied | won | lost"}, list_leads))
+    t.add(Tool("research_lead", "Send a Splinter to research a lead in depth before Patrick reaches out. Contacts no one.",
+               {"id": "lead number"}, research_lead))
     t.add(Tool("note_lead", "Add research notes to a lead, or dismiss it as not a fit.",
                {"id": "lead number", "notes": "what you found", "dismiss": "(optional) true to dismiss"}, note_lead))
     t.add(Tool("draft_outreach", "Write (or rewrite) the outreach email draft for a lead. It is NOT sent.",

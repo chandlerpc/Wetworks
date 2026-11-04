@@ -76,7 +76,8 @@ def floor_state(*, settings, architect, comms, events, scheduler=None, missions=
          "last": last("intel")},
         {"id": "revenue", "name": "Revenue", "role": "Sleeper", "room": "revenue", "kind": "sleeper",
          "state": state("revenue", sleeper=True), "vendor": "local", "model": local, "next": _iso(nxt.get("revenue")),
-         "last": last("revenue"), "pipeline": leads.counts() if leads else {}},
+         "last": last("revenue"), "pipeline": leads.counts() if leads else {},
+         "followups_due": leads.due_count() if leads else 0},
         {"id": "learner", "name": "The Archivist", "role": "Sleeper", "room": "archives", "kind": "sleeper",
          "state": state("learner", sleeper=True), "vendor": "local", "model": local, "next": _iso(nxt.get("learner")),
          "last": last("learner")},
@@ -89,7 +90,7 @@ def floor_state(*, settings, architect, comms, events, scheduler=None, missions=
         forge_info = {"online": bool(h.get("ok")), "gpu": h.get("gpu", ""), "util": h.get("gpu_util"),
                       "temp": h.get("gpu_temp"), "mem_used": h.get("gpu_mem_used"), "mem_total": h.get("gpu_mem_total"),
                       "training": paused, "job": next((j for j in jobs if j["status"] in ("running", "importing")), None),
-                      "queued": [j["id"] for j in jobs if j["status"] == "queued"]}
+                      "queued": [j["id"] for j in jobs if j["status"] == "queued"], "lessons": forge.lessons()}
         agents.append({"id": "forge", "name": "Forge Operator", "role": "The Forge", "room": "forge", "kind": "forge",
                        "state": "blocked" if "forge" in errored else ("working" if paused or "forge" in busy else "idle"),
                        "vendor": "local", "model": settings.forge_base_model.split("/")[-1], "last": last("forge")})

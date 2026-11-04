@@ -426,12 +426,15 @@
   const LEAD_STATUS = { new: "New", contacted: "Contacted", replied: "Replied", won: "Won", lost: "Lost", dismissed: "Not a fit" };
   let leadFilter = "";
   async function loadLeads() {
-    const { leads, counts } = await api(`/api/leads${leadFilter ? `?status=${leadFilter}` : ""}`);
+    const { leads, counts, due } = await api(`/api/leads${leadFilter ? `?status=${leadFilter}` : ""}`);
     const c = (k) => counts[k] || 0;
-    $("#lead-counts").textContent = `${c("new")} new · ${c("contacted")} contacted · ${c("replied")} replied · ${c("won")} won`;
+    $("#lead-counts").textContent = `${c("new")} new · ${c("contacted")} contacted · ${c("replied")} replied · ${c("won")} won`
+      + (due ? ` · ${due} to follow up` : "");
+    const tab = $(".tabs button[data-pane=leads]");
+    if (tab) tab.textContent = due ? `Leads (${due})` : "Leads";
     const chips = $("#lead-filter");
     if (!chips.children.length) {
-      [["", "Active"], ["new", "New"], ["contacted", "Contacted"], ["replied", "Replied"], ["won", "Won"], ["lost", "Lost"]].forEach(([k, label]) => {
+      [["", "Active"], ["due", "Follow up"], ["new", "New"], ["contacted", "Contacted"], ["replied", "Replied"], ["won", "Won"], ["lost", "Lost"]].forEach(([k, label]) => {
         const b = el("button", "chip", label);
         b.type = "button";
         b.setAttribute("aria-pressed", String(k === leadFilter));
@@ -451,6 +454,12 @@
       return;
     }
     leads.forEach((l) => list.append(leadItem(l, open.has(String(l.id)))));
+  }
+
+  async function leadAction(id, action, btn, body) {
+    btn.disabled = true;
+    try { await api(`/api/leads/${id}/${action}`, { method: "POST", body: JSON.stringify(body || {}) }); await loadLeads(); }
+    catch (err) { if (err.message !== "unauthorized") alert(err.message); btn.disabled = false; }
   }
 
   function leadItem(l, isOpen) {
@@ -477,6 +486,45 @@
     });
     actions.append(sel);
     li.append(actions);
+
+    // follow-ups: Wetworks reminds and drafts; Patrick sends
+    if (l.status === "contacted" && l.followup_due) {
+      const isDue = new Date(l.followup_due) <= new Date();
+      const fu = el("div", `followup${isDue ? " due" : ""}`);
+      fu.append(el("span", "fu-label", isDue ? `Follow-up ${l.followups + 1} due`
+        : `Follow-up ${l.followups + 1} on ${new Date(l.followup_due).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}`));
+      const done = el("button", "small", "I followed up"); done.type = "button";
+      const later = el("button", "ghost small", "Snooze 3 days"); later.type = "button";
+      done.addEventListener("click", () => leadAction(l.id, "followed-up", done));
+      later.addEventListener("click", () => leadAction(l.id, "snooze", later, { days: 3 }));
+      fu.append(done, later);
+      li.append(fu);
+      if (l.followup_draft) {
+        const fd = el("details"); fd.dataset.id = `fu-${l.id}`; fd.open = isOpen;
+        fd.append(el("summary", null, "Follow-up draft"), el("div", "draft", l.followup_draft));
+        const cp = el("button", "small", "Copy follow-up"); cp.type = "button";
+        cp.addEventListener("click", async () => {
+          try { await navigator.clipboard.writeText(l.followup_draft); cp.textContent = "Copied"; } catch { cp.textContent = "Select and copy"; }
+          setTimeout(() => (cp.textContent = "Copy follow-up"), 2000);
+        });
+        const r = el("div", "lead-actions"); r.append(cp); fd.append(r);
+        li.append(fd);
+      }
+    } else if (l.status === "contacted" && l.followups) {
+      li.append(el("p", "meta", `Followed up ${l.followups} time${l.followups > 1 ? "s" : ""}. No more nudges planned.`));
+    }
+
+    // research a Splinter did before outreach
+    const rs = el("details"); rs.dataset.id = `rs-${l.id}`; rs.open = isOpen && !!l.research;
+    const researching = l.research_mission && !l.research;
+    rs.append(el("summary", null, researching ? `Researching… (mission #${l.research_mission})` : l.research ? "Research" : "Research this lead"));
+    if (l.research) rs.append(el("div", "draft research", l.research));
+    if (!researching) {
+      const go = el("button", "ghost small", l.research ? "Research again" : "Send a Splinter"); go.type = "button";
+      go.addEventListener("click", () => leadAction(l.id, "research", go));
+      const r = el("div", "lead-actions"); r.append(go); rs.append(r);
+    }
+    li.append(rs);
 
     const det = el("details");
     det.dataset.id = l.id;

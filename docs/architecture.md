@@ -257,9 +257,20 @@ have `search_past_chats` and `read_past_chat`.
   so it survives restarts. While set, cells, Commander cycles, the Splinter Operator and Forge jobs don't
   start new work. Chat with C.L.a.i.R and The Architect still works.
 
+## Milestone 14: Lead follow-ups and research before outreach
+
+- Strong new leads (fit ≥ `draft_min_fit`) get a Splinter research mission (`source = "lead:<id>"`),
+  `research_per_run` per morning. The first-email draft waits for the write-up and uses it; a failed
+  mission still unblocks the draft. Lead-research missions don't trigger an Architect cycle.
+- Marking a lead Contacted schedules follow-ups (`followup_days = [4, 7]`). When one is due, the Revenue
+  run drafts it and puts it in the brief. "I followed up" schedules the next; after the last one it stops.
+  Replied, won, lost or not-a-fit clears it. Nothing is ever sent by Wetworks.
+- API: `POST /api/leads/{id}/followed-up | snooze | research`, `GET /api/leads?status=due`.
+  Agents get `research_lead` and `list_leads(status="due")`.
+- The Floor HUD shows Forge lessons: teacher decisions banked toward the 150 a first training run needs.
+
 ## Next milestones
 
 1. Claude powering the agents and the Code cell (Friday).
-2. Revenue follow-ups: reminders for contacted leads, and lead research before outreach.
-3. First real Forge run on the MSI and a benchmark against gemma.
-4. Unseal rooms (Day Job, Finance, Game Dev, Content) as their cells are built.
+2. First real Forge run on the MSI and a benchmark against gemma.
+3. Unseal rooms (Day Job, Finance, Game Dev, Content) as their cells are built.

@@ -212,14 +212,17 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
         if leads is None:
             return JSONResponse({"leads": [], "counts": {}})
         status = request.query_params.get("status") or None
-        return JSONResponse({"leads": leads.recent(status=status), "counts": leads.counts()})
+        rows = leads.due_followups(100) if status == "due" else leads.recent(status=status)
+        return JSONResponse({"leads": rows, "counts": leads.counts(), "due": leads.due_count()})
 
     async def update_lead(request: Request):
         if leads is None:
             return JSONResponse({"error": "Leads aren't available."}, status_code=503)
         body = await request.json()
+        rev = cells.get("revenue")
         try:
-            lead = leads.update(int(request.path_params["lid"]), status=body.get("status"), notes=body.get("notes"))
+            lead = leads.update(int(request.path_params["lid"]), status=body.get("status"), notes=body.get("notes"),
+                                followup_days=rev.next_followup_days(0) if rev else None)
         except ValueError as e:
             return JSONResponse({"error": str(e)}, status_code=400)
         if not lead:
@@ -236,6 +239,39 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
         if not text:
             return JSONResponse({"error": "Couldn't write a draft just now. Try again in a minute."}, status_code=502)
         return JSONResponse(leads.get(lead["id"]))
+
+    async def lead_action(request: Request):
+        """followed-up | snooze | research. None of these contact the business."""
+        lid, action = int(request.path_params["lid"]), request.path_params["action"]
+        lead = leads.get(lid) if leads is not None else None
+        rev = cells.get("revenue")
+        if not lead or rev is None:
+            return JSONResponse({"error": "No lead with that number."}, status_code=404)
+        if action == "followed-up":
+            if lead["status"] != "contacted":
+                return JSONResponse({"error": "Mark the lead contacted first."}, status_code=409)
+            nxt = rev.next_followup_days(lead["followups"] + 1)
+            lead = leads.followed_up(lid, nxt)
+            events.add("revenue", "info", f"Followed up with {lead['business']}"
+                       + (f"; next nudge in {nxt} days" if nxt else "; that was the last follow-up"))
+        elif action == "snooze":
+            body = await request.json() if (await request.body()) else {}
+            days = max(1, min(30, int(body.get("days", 3))))
+            if lead["status"] != "contacted":
+                return JSONResponse({"error": "Only contacted leads have follow-ups."}, status_code=409)
+            lead = leads.snooze(lid, days)
+        elif action == "research":
+            if lead["research_mission"] and not lead["research"]:
+                return JSONResponse({"error": f"Research is already running (mission #{lead['research_mission']})."},
+                                    status_code=409)
+            leads.set_research(lid, text="")
+            m = await run_in_threadpool(rev.research, leads.get(lid))
+            if not m:
+                return JSONResponse({"error": "Missions aren't available."}, status_code=503)
+            lead = leads.get(lid)
+        else:
+            return JSONResponse({"error": "Unknown action."}, status_code=404)
+        return JSONResponse(lead)
 
     async def list_memory(request: Request):
         if memory is None:
@@ -370,6 +406,7 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
         Route("/api/leads", list_leads, methods=["GET"]),
         Route("/api/leads/{lid:int}", update_lead, methods=["POST"]),
         Route("/api/leads/{lid:int}/draft", redraft_lead, methods=["POST"]),
+        Route("/api/leads/{lid:int}/{action:str}", lead_action, methods=["POST"]),
         Route("/api/missions", list_missions, methods=["GET"]),
         Route("/api/missions", new_mission, methods=["POST"]),
         Route("/api/missions/{mid:int}", get_mission, methods=["GET"]),

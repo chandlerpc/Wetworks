@@ -35,6 +35,12 @@ class ForgeError(RuntimeError):
 
 
 class Forge:
+    def lessons(self) -> dict:
+        """How many usable teacher decisions are banked, against what a training run needs."""
+        c = self.traces.counts()
+        have = sum(c.get(b, {}).get("valid", 0) for b in TEACHER_BRAINS)
+        return {"have": have, "needed": MIN_EXAMPLES, "by_brain": {b: c[b]["valid"] for b in TEACHER_BRAINS if b in c}}
+
     def __init__(self, *, settings, llm, traces, events, data_dir: Path, runner_url: str, ollama_url: str):
         self.s = settings
         self.llm = llm

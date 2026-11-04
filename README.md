@@ -79,6 +79,13 @@ Every morning the Revenue cell looks for local businesses that could use your se
 (`config/revenue.toml`: services, area, ideal customers, search terms) and drafts outreach for the
 best fits. It never sends anything: review, copy and track leads in the console's **Leads** tab.
 
+- **Research first.** Each strong lead gets a Splinter that researches the business (what they do, who
+  decides, what software they use, recent news) before the first email is drafted. Tap "Send a Splinter"
+  on any lead to research it yourself.
+- **Follow-ups.** Mark a lead Contacted after you email them. If they haven't replied in 4 days, the
+  morning brief reminds you and a follow-up draft is waiting in Leads (then again 7 days later, then it
+  stops). Tap "I followed up" after sending, or "Snooze 3 days". Leads shows a count when any are due.
+
 ```
 docker compose exec architect python -m wetworks.main run revenue
 ```

@@ -49,10 +49,28 @@ What we noticed: {signal}
 Service to offer: {offer} ({why})
 Area: {area}
 
-Rules: under 120 words; plain and specific to what we noticed; friendly, local, no hype; do NOT
+{research}Rules: under 120 words; plain and specific to what we noticed; friendly, local, no hype; do NOT
 invent past clients, results, prices or facts about them; one soft ask (a 15-minute call this week);
 sign off as {owner}, {company}.
 Reply with ONLY this JSON object: {{"subject": "...", "body": "..."}}"""
+
+FOLLOWUP_PROMPT = """Write follow-up #{n} from {owner} ({company}) to {business}. They haven't replied to this
+email, sent {days} days ago:
+
+{previous}
+
+Rules: under 70 words; polite and brief; add one new useful point instead of repeating the first email;
+no guilt, no "just checking in", no invented facts; {closing}; sign off as {owner}, {company}.
+Reply with ONLY this JSON object: {{"subject": "...", "body": "..."}}"""
+
+RESEARCH_REQUEST = """Research {business} before Patrick reaches out to them. Website: {url}. Area: {location}.
+What we noticed: {signal}
+What Patrick would offer: {offer}
+
+Find, citing sources: what they do and roughly how big they are; who runs it or makes decisions (only
+names that are public on their site or news); the booking, intake or office software they appear to use;
+anything recent (openings, hiring, reviews mentioning wait times or missed calls). Finish with the best
+angle for a first message and anything that makes them a poor fit. Do not contact them."""
 
 OFFER_NAMES = {"chatbot": "Chatbot", "automation": "Automation", "dashboard": "Dashboard"}
 
@@ -64,6 +82,7 @@ class Revenue(Cell):
     def __init__(self, ctx, leads: LeadStore, config_path: Path | None = None):
         super().__init__(ctx)
         self.leads = leads
+        self.open_mission = None  # set by main: queues a Splinter research mission
         self.config_path = config_path or ctx.settings.config_dir / "revenue.toml"
         self.config = self._load()
 
@@ -92,6 +111,7 @@ class Revenue(Cell):
         self.config = self._load()
         if not self.config.get("enabled", True):
             return []
+        nudges = self.check_followups()
         aggregators = set(self.config.get("aggregators", []))
         is_agg = lambda url: any(domain_of(url) == a or domain_of(url).endswith("." + a) for a in aggregators)
 
@@ -102,7 +122,7 @@ class Revenue(Cell):
                 new = self._hunt_fixed(is_agg)
         else:
             new = self._hunt_fixed(is_agg)
-        return self._finish(new)
+        return nudges + self._finish(new)
 
     def _hunt_agent(self, is_agg) -> tuple[list[dict], bool]:
         """Revenue as an agent: it chooses where to look, checks businesses, and records real leads."""
@@ -193,12 +213,14 @@ class Revenue(Cell):
         return new
 
     def _finish(self, new: list[dict]) -> list[Finding]:
-        # 3. Draft outreach for the best fits (still never sent)
         min_fit = int(self.config.get("draft_min_fit", 4))
+        # 3. Research the best fits before drafting (a Splinter mission per lead; drafts wait for it)
+        self.queue_research(min_fit)
+        # 4. Draft outreach for the best fits (still never sent)
         for lead in self.leads.needing_drafts(min_fit, int(self.config.get("max_drafts", 4))):
             self.draft(lead)
 
-        # 4. Surface strong leads in the brief
+        # 5. Surface strong leads in the brief
         found = []
         for lead in new:
             if lead["fit"] >= min_fit:
@@ -211,18 +233,103 @@ class Revenue(Cell):
         self.log.info("Revenue: %d new leads (%d strong)", len(new), len(found))
         return found
 
-    def draft(self, lead: dict) -> str:
-        raw = self._ask(f"revenue:draft:{lead['id']}", DRAFT_PROMPT.format(
-            owner=self.config.get("owner", "Patrick"), company=self.config.get("company", ""),
-            business=lead["business"], signal=lead["signal"] or "(not stated)",
-            offer=lead["offer"] or "help with AI and automation", why=lead["why"] or "",
-            area=self.config.get("area", "")), max_tokens=500)
+    def _email(self, raw: str) -> str:
         from ..code.brain import parse_json_obj
 
         data = parse_json_obj(raw)
         subject, body = str(data.get("subject", "")).strip(), str(data.get("body", "")).strip()
         if not body:
             return ""
-        text = f"Subject: {subject}\n\n{body}" if subject else body
-        self.leads.update(lead["id"], draft=text)
+        return f"Subject: {subject}\n\n{body}" if subject else body
+
+    def draft(self, lead: dict) -> str:
+        research = lead.get("research", "")
+        research = (f"Research done before outreach (use only what helps; don't recite it):\n{research[:2500]}\n\n"
+                    if research and not research.startswith("(") else "")
+        text = self._email(self._ask(f"revenue:draft:{lead['id']}", DRAFT_PROMPT.format(
+            owner=self.config.get("owner", "Patrick"), company=self.config.get("company", ""),
+            business=lead["business"], signal=lead["signal"] or "(not stated)",
+            offer=lead["offer"] or "help with AI and automation", why=lead["why"] or "",
+            area=self.config.get("area", ""), research=research), max_tokens=500))
+        if text:
+            self.leads.update(lead["id"], draft=text)
         return text
+
+    # ---- research before outreach ----------------------------------------------------------------
+    def research(self, lead: dict) -> dict | None:
+        """Queue a Splinter mission that researches one lead. Returns the mission, or None if unavailable."""
+        if self.open_mission is None:
+            return None
+        m = self.open_mission(f"Research {lead['business']} before outreach"[:80], RESEARCH_REQUEST.format(
+            business=lead["business"], url=lead["url"] or "(unknown)", location=lead["location"] or self.config.get("area", ""),
+            signal=lead["signal"] or "(not stated)", offer=lead["offer"] or "AI and automation help"),
+            f"lead:{lead['id']}")
+        self.leads.set_research(lead["id"], mission=m["id"])
+        return m
+
+    def queue_research(self, min_fit: int) -> int:
+        if self.open_mission is None or not self.config.get("research_before_outreach", True):
+            return 0
+        n = 0
+        for lead in self.leads.needing_research(min_fit, int(self.config.get("research_per_run", 2))):
+            if self.research(lead):
+                n += 1
+        return n
+
+    def mission_finished(self, mission: dict) -> bool:
+        """Operator callback. Attaches a lead-research write-up to its lead and drafts the first email."""
+        src = str(mission.get("source", ""))
+        if not src.startswith("lead:"):
+            return False
+        lead = self.leads.get(int(src.split(":", 1)[1]))
+        if not lead:
+            return True
+        if mission["status"] == "done" and mission.get("result"):
+            sources = "\n".join(f"[{s['n']}] {s['url']}" for s in mission.get("sources") or [])
+            text = mission["result"].strip() + (f"\n\nSources:\n{sources}" if sources else "")
+        else:
+            text = f"(research mission #{mission['id']} {mission['status']})"
+        lead = self.leads.set_research(lead["id"], text=text)
+        if lead["status"] == "new" and not lead["draft"]:
+            self.draft(lead)
+        if self.ctx.events is not None:
+            self.ctx.events.add("revenue", "done" if not text.startswith("(") else "warn",
+                                f"Lead #{lead['id']} {lead['business']}: research "
+                                f"{'ready and outreach drafted' if not text.startswith('(') else 'did not finish'}")
+        return True
+
+    # ---- follow-ups ------------------------------------------------------------------------------
+    def followup_schedule(self) -> list[int]:
+        """Days to wait: first entry after the first email, then after each follow-up."""
+        return [max(1, int(d)) for d in self.config.get("followup_days", [4, 7])]
+
+    def next_followup_days(self, done: int) -> int | None:
+        sched = self.followup_schedule()
+        return sched[done] if done < len(sched) else None
+
+    def check_followups(self) -> list[Finding]:
+        """Draft follow-ups for contacted leads that are due, and put them in the brief. Never sends."""
+        out = []
+        sched = self.followup_schedule()
+        for lead in self.leads.due_followups():
+            n = lead["followups"] + 1
+            if not lead["followup_draft"] and lead["draft"]:
+                text = self._email(self._ask(f"revenue:followup:{lead['id']}", FOLLOWUP_PROMPT.format(
+                    n=n, owner=self.config.get("owner", "Patrick"), company=self.config.get("company", ""),
+                    business=lead["business"], previous=lead["draft"][:1500],
+                    days=sum(sched[:n]) if sched else "a few",
+                    closing="make this the last nudge and leave the door open" if n >= len(sched)
+                    else "one soft ask"), max_tokens=350))
+                if text:
+                    self.leads.set_followup_draft(lead["id"], text)
+            f = Finding(cell=self.name, topic="Revenue follow-ups",
+                        title=f"Follow up #{n} with {lead['business']}",
+                        summary="No reply yet. A follow-up draft is ready in Leads." if lead["draft"]
+                        else "No reply yet. Time for a follow-up.",
+                        url=f"{lead['url'] or 'lead:' + str(lead['id'])}#followup-{n}-{lead['followup_due'][:10]}",
+                        importance=3)
+            if self.ctx.findings.add(f):
+                out.append(f)
+        if out and self.ctx.events is not None:
+            self.ctx.events.add("revenue", "info", f"{len(out)} lead{'s' if len(out) > 1 else ''} due a follow-up today")
+        return out
