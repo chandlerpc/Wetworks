@@ -79,6 +79,9 @@ def load_settings() -> Settings:
         s.azure_speech_key = os.environ.get("AZURE_SPEECH_KEY", "")
     if not s.azure_speech_region:
         s.azure_speech_region = os.environ.get("AZURE_SPEECH_REGION", "")
+    # Forgive common copy-paste slips: quotes, spaces, and "East US" instead of "eastus".
+    s.azure_speech_key = s.azure_speech_key.strip().strip('"').strip("'").strip()
+    s.azure_speech_region = s.azure_speech_region.strip().strip('"').strip("'").replace(" ", "").lower()
     if not s.xai_api_key:
         s.xai_api_key = os.environ.get("XAI_API_KEY", "")
     return s
