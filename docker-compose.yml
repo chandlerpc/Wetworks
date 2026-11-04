@@ -14,6 +14,7 @@ services:
     depends_on:
       - ollama
       - searxng
+      - whisper
     logging: &logging
       driver: json-file
       options:
@@ -38,6 +39,25 @@ services:
               capabilities: [gpu]
     logging: *logging
 
+  # C.L.a.i.R's ears: speech-to-text on the GPU (free, private)
+  whisper:
+    image: onerahmet/openai-whisper-asr-webservice:latest-gpu
+    container_name: wetworks-whisper
+    restart: unless-stopped
+    environment:
+      ASR_ENGINE: faster_whisper
+      ASR_MODEL: small.en
+    volumes:
+      - whisper-models:/root/.cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    logging: *logging
+
   # Free self-hosted web search
   searxng:
     image: searxng/searxng:latest
@@ -52,3 +72,4 @@ services:
 volumes:
   wetworks-data:
   ollama-models:
+  whisper-models:

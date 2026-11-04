@@ -12,7 +12,8 @@ from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse
+from starlette.concurrency import run_in_threadpool
+from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
@@ -54,7 +55,7 @@ def _iso(dt) -> str | None:
 
 
 def create_app(*, settings, architect, cells: dict, comms, events, scheduler=None,
-               missions=None, open_mission=None) -> Starlette:
+               missions=None, open_mission=None, voice=None) -> Starlette:
     def run_bg(fn):
         threading.Thread(target=fn, daemon=True).start()
 
@@ -106,12 +107,54 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
         channel = request.path_params["channel"]
         try:
             body = await request.json()
-            mid = comms.post(channel, str(body.get("text", "")))
+            wait = bool(body.get("wait"))  # voice waits for the reply so it can be spoken
+            mid = await run_in_threadpool(comms.post, channel, str(body.get("text", "")), wait)
         except KeyError:
             return JSONResponse({"error": "Unknown channel."}, status_code=404)
         except ValueError:
             return JSONResponse({"error": "Write a message first."}, status_code=400)
+        if wait:
+            replies = [m for m in comms.messages(channel, after_id=mid) if m["sender"] == channel]
+            return JSONResponse({"id": mid, "reply": replies[-1] if replies else None})
         return JSONResponse({"id": mid}, status_code=202)
+
+    async def voice_config(request: Request):
+        on = voice is not None
+        return JSONResponse({
+            "hear": bool(on and voice.can_hear),
+            "speak": bool(on and voice.can_speak),
+            "voice": settings.voice_name,
+            "wake_phrase": settings.wake_phrase,
+            "stop_phrases": [p.strip() for p in settings.stop_phrases.split("|") if p.strip()],
+            "idle_seconds": settings.voice_idle_seconds,
+            "chars_used": voice.chars_this_month() if on else 0,
+            "chars_cap": settings.tts_monthly_char_cap,
+        })
+
+    async def voice_transcribe(request: Request):
+        if voice is None or not voice.can_hear:
+            return JSONResponse({"error": "Hearing isn't set up."}, status_code=503)
+        audio = await request.body()
+        if not audio:
+            return JSONResponse({"error": "No audio received."}, status_code=400)
+        if len(audio) > 12_000_000:
+            return JSONResponse({"error": "That recording is too long."}, status_code=413)
+        try:
+            text = await run_in_threadpool(voice.transcribe, audio, request.headers.get("content-type", "audio/webm"))
+        except Exception as e:
+            events.add("clair", "warn", f"Couldn't transcribe: {e}")
+            return JSONResponse({"error": "Couldn't make out the recording. Whisper may still be starting."}, status_code=502)
+        return JSONResponse({"text": text})
+
+    async def voice_say(request: Request):
+        if voice is None:
+            return JSONResponse({"error": "Voice isn't set up."}, status_code=503)
+        body = await request.json()
+        try:
+            audio = await run_in_threadpool(voice.speak, str(body.get("text", "")))
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=503)
+        return Response(audio, media_type="audio/mpeg", headers={"Cache-Control": "no-store"})
 
     async def action(request: Request):
         name = request.path_params["name"]
@@ -156,7 +199,7 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
     async def index(request: Request):
         v = _asset_version()
         html = (CONSOLE_DIR / "index.html").read_text()
-        for asset in ("console.css", "console.js", "manifest.json"):
+        for asset in ("console.css", "console.js", "voice.js", "manifest.json"):
             html = html.replace(f"/static/{asset}", f"/static/{asset}?v={v}")
         return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
@@ -168,6 +211,9 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
         Route("/api/comms/{channel}", get_messages, methods=["GET"]),
         Route("/api/comms/{channel}", post_message, methods=["POST"]),
         Route("/api/actions/{name}", action, methods=["POST"]),
+        Route("/api/voice", voice_config, methods=["GET"]),
+        Route("/api/voice/transcribe", voice_transcribe, methods=["POST"]),
+        Route("/api/voice/say", voice_say, methods=["POST"]),
         Route("/api/missions", list_missions, methods=["GET"]),
         Route("/api/missions", new_mission, methods=["POST"]),
         Route("/api/missions/{mid:int}", get_mission, methods=["GET"]),

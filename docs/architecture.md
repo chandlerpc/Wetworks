@@ -123,9 +123,22 @@ Other vendors (Gemini, Grok, OpenAI) plug in behind the same `LLM` interface lat
 - Her private mode is a self-contained block, so it can be rebuilt (new model, voice, tools)
   without touching the public recruiter.
 
+## Milestone 6: C.L.a.i.R's voice
+
+- Hearing: `whisper` container (faster-whisper `small.en`) on the GPU. Free and private.
+- Speaking: Azure neural TTS, `en-IE-EmilyNeural` (young Irish female). Free tier 500k
+  characters/month; `tts_monthly_char_cap` (480k) stops speech before that and falls back to text.
+  The Azure key stays on the MSI; the phone only receives MP3 audio.
+- Console (`console/voice.js`): hold-to-talk mic, and hands-free mode. Wake phrase
+  ("hey clair"), stop phrases ("that's all, clair", "goodbye, clair"…), idle timeout (90 s).
+  Voice activity detection runs in the browser; each utterance is transcribed on the MSI.
+- Limit: browsers only allow the microphone while the console is on screen. Always-on
+  "Hey Clair" with the screen locked needs a native app.
+
 ## Next milestones
 
-1. Revenue cell (Sleeper), fed by Intel's money findings.
+1. Code cell, so Wetworks can work on its own repo (needed for "build itself").
+2. Revenue cell (Sleeper), fed by Intel's money findings.
 3. C.L.a.i.R bridge: The Architect ↔ Cloudflare Worker.
 4. The Forge: local model container with GPU.
 5. Ops-center UI (gritty Splinter Cell style).

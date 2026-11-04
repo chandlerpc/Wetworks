@@ -141,6 +141,7 @@
   function updateLinkNote() {
     const n = $("#clair-link");
     n.hidden = channel !== "clair";
+    const vb = $("#voicebar"); if (vb && vb.dataset.ready) vb.hidden = channel !== "clair";
     n.className = `link-note ${clairMode}`;
     n.textContent = LINK[clairMode] || LINK.local;
   }
@@ -370,11 +371,13 @@
     selectChannel(channel);
     const s = safe(loadStatus), ev = safe(loadEvents), m = safe(loadMessages), f = safe(loadFindings), mi = safe(loadMissions);
     s(); ev(); f(); mi();
+    if (window.WWVoice) window.WWVoice.init();
     timers.push(setInterval(s, 8000), setInterval(ev, 4000), setInterval(m, 2500), setInterval(f, 30000), setInterval(mi, 5000));
   }
 
   function lock(message = "") {
     timers.splice(0).forEach(clearInterval);
+    if (window.WWVoice) window.WWVoice.stop();
     token = ""; store.del("wetworks.token");
     $("#app").hidden = true; $("#tabs").hidden = true; $("#logout").hidden = true;
     $("#gate").hidden = false;
@@ -396,6 +399,14 @@
       if (err.message !== "unauthorized") $("#gate-error").textContent = "Can't reach the MSI. Check that Tailscale is on.";
     }
   }
+
+  // Hooks for voice.js
+  window.WW = {
+    api,
+    token: () => token,
+    refresh: () => safe(loadMessages)(),
+    useClair: () => { if (channel !== "clair") selectChannel("clair"); },
+  };
 
   // ---- Wire up --------------------------------------------------------
   $("#gate-form").addEventListener("submit", unlock);

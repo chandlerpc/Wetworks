@@ -52,6 +52,17 @@ class Settings(BaseSettings):
     clair_token: str = ""
     owner_name: str = "Patrick"
 
+    # Voice. Hearing: Whisper container on the GPU. Speaking: Azure neural TTS (free tier
+    # 500k characters/month; the cap below stops speech a little before that).
+    whisper_url: str = "http://whisper:9000"
+    azure_speech_key: str = ""
+    azure_speech_region: str = ""
+    voice_name: str = "en-IE-EmilyNeural"
+    tts_monthly_char_cap: int = 480_000
+    wake_phrase: str = "hey clair"
+    stop_phrases: str = "that's all clair|goodbye clair|that's all|goodbye"
+    voice_idle_seconds: int = 90
+
     # Command API / ops console. The console refuses to start without a token.
     console_token: str = ""
     console_port: int = 8700
@@ -64,6 +75,10 @@ def load_settings() -> Settings:
     s = Settings()
     if not s.anthropic_api_key:
         s.anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not s.azure_speech_key:
+        s.azure_speech_key = os.environ.get("AZURE_SPEECH_KEY", "")
+    if not s.azure_speech_region:
+        s.azure_speech_region = os.environ.get("AZURE_SPEECH_REGION", "")
     if not s.xai_api_key:
         s.xai_api_key = os.environ.get("XAI_API_KEY", "")
     return s

@@ -62,6 +62,16 @@ class Ledger:
         ).fetchone()
         return float(row[0])
 
+    def tokens_this_month(self, model: str, now: datetime | None = None) -> int:
+        """Sum of input_tokens logged for `model` this month (used for character-billed voice)."""
+        now = now or datetime.now(timezone.utc)
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        row = self.db.execute(
+            "SELECT COALESCE(SUM(input_tokens), 0) FROM calls WHERE model = ? AND ts >= ?",
+            (model, month_start.isoformat()),
+        ).fetchone()
+        return int(row[0])
+
     def since(self, start: datetime) -> list[tuple[str, float]]:
         """Spend per agent since `start`."""
         return [

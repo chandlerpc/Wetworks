@@ -47,6 +47,13 @@ Run a mission from the terminal:
 docker compose exec architect python -m wetworks.main mission "Find three Orlando clinics that might pay for AI intake automation"
 ```
 
+## Talking to C.L.a.i.R
+
+In Comms, hold the mic button to talk, or turn on **Hands-free** and say "Hey Clair".
+Say "That's all, Clair" (or stay quiet for 90 seconds) to end. She answers in an Irish voice
+(Azure `en-IE-EmilyNeural`). Set `AZURE_SPEECH_KEY` and `AZURE_SPEECH_REGION` in `.env`;
+without them she still hears you and replies in text.
+
 ## Intel topics
 
 Edit `config/intel.toml` to add, change or pause topics. It's re-read on every run, so no rebuild is needed.

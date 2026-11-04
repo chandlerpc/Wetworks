@@ -21,6 +21,7 @@ from .comms import Comms
 from .config import load_settings
 from .missions import MissionStore
 from .operators import SleeperOperator, SplinterOperator
+from .voice import Voice
 
 log = logging.getLogger("wetworks")
 
@@ -114,7 +115,7 @@ def run() -> None:
 
     app = create_app(settings=settings, architect=architect, cells=cells, comms=comms,
                      events=architect.events, scheduler=sched, missions=comms.missions,
-                     open_mission=comms.open_mission_fn)
+                     open_mission=comms.open_mission_fn, voice=Voice(settings, architect.ledger))
     log.info("Console listening on port %d", settings.console_port)
     uvicorn.run(app, host="0.0.0.0", port=settings.console_port, log_level="warning")
     sched.shutdown(wait=False)
