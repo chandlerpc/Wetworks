@@ -90,7 +90,8 @@ def floor_state(*, settings, architect, comms, events, scheduler=None, missions=
         forge_info = {"online": bool(h.get("ok")), "gpu": h.get("gpu", ""), "util": h.get("gpu_util"),
                       "temp": h.get("gpu_temp"), "mem_used": h.get("gpu_mem_used"), "mem_total": h.get("gpu_mem_total"),
                       "training": paused, "job": next((j for j in jobs if j["status"] in ("running", "importing")), None),
-                      "queued": [j["id"] for j in jobs if j["status"] == "queued"], "lessons": forge.lessons()}
+                      "queued": [j["id"] for j in jobs if j["status"] == "queued"], "lessons": forge.lessons(),
+                      "drills": comms.drills.stats() if getattr(comms, "drills", None) else None}
         agents.append({"id": "forge", "name": "Forge Operator", "role": "The Forge", "room": "forge", "kind": "forge",
                        "state": "blocked" if "forge" in errored else ("working" if paused or "forge" in busy else "idle"),
                        "vendor": "local", "model": settings.forge_base_model.split("/")[-1], "last": last("forge")})

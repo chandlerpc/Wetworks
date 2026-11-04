@@ -498,6 +498,11 @@
         b.addEventListener("click", () => act("cycle", b));
         row.append(b);
       }
+      if (a.id === "forge") {
+        const b = el("button", "ghost small", "Run a drill"); b.type = "button";
+        b.addEventListener("click", () => act("drill", b));
+        row.append(b);
+      }
       if (a.mission) {
         const b = el("button", "ghost small", "Open mission"); b.type = "button";
         b.addEventListener("click", () => window.WWFloor.toTactical("missions", null, a.mission));
@@ -524,7 +529,9 @@
           const dl = el("dl", "facts");
           [["GPU", g.gpu], ["Load", g.util != null ? `${g.util}%` : null], ["Temperature", g.temp != null ? `${g.temp}°C` : null],
            ["Memory", g.mem_used != null ? `${Math.round(g.mem_used)} of ${Math.round(g.mem_total)} MB` : null],
-           ["Lessons", g.lessons ? `${g.lessons.have} of ${g.lessons.needed} needed` : null], ["Training", g.job ? `${g.job.id}: ${g.job.message}` : (g.queued || []).length ? `${g.queued.length} queued for tonight` : "Nothing running"]]
+           ["Lessons", g.lessons ? `${g.lessons.have} of ${g.lessons.needed} needed` : null],
+           ["Drills today", g.drills ? (g.drills.paused_until ? `Paused until ${g.drills.paused_until} (Gemini limit)`
+             : `${g.drills.steps_today} of ${g.drills.daily_steps} Gemini calls`) : null], ["Training", g.job ? `${g.job.id}: ${g.job.message}` : (g.queued || []).length ? `${g.queued.length} queued for tonight` : "Nothing running"]]
             .forEach(([k, v]) => { if (v) dl.append(el("dt", null, k), el("dd", null, v)); });
           body.append(dl);
         }

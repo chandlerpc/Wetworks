@@ -151,7 +151,12 @@ def build(settings):
 
     operator.on_done = on_done
     comms.commander, comms.approvals, comms.chats, comms.forge = commander, approvals, chats, forge
-    commander.halt = operator.halt = comms.halt = halt
+    from .agent.drills import Drills
+
+    comms.drills = Drills(path=settings.data_dir / "traces.db", traces=traces, bridge=bridge, clair_tools=clair_tools,
+                          architect_tools=toolbox, context_fn=architect.context_block, events=architect.events,
+                          leads=leads, missions=missions, settings=settings, lessons_fn=forge.lessons)
+    commander.halt = operator.halt = comms.halt = comms.drills.halt = halt
     return architect, {"intel": intel, "revenue": revenue, "learner": learner}, comms
 
 
@@ -182,7 +187,8 @@ def run() -> None:
 
         forge, cmd, rest = comms.forge, sys.argv[1], sys.argv[2:]
         if cmd == "forge-status":
-            print(_json.dumps({"forge": forge.health(), "datasets": forge.datasets(), "jobs": forge.jobs(5),
+            print(_json.dumps({"forge": forge.health(), "lessons": forge.lessons(), "drills": comms.drills.stats(),
+                               "datasets": forge.datasets(), "jobs": forge.jobs(5),
                                "decisions": forge.traces.counts(), "models": forge.models(), "evals": forge.evals(5)}, indent=2))
         elif cmd == "forge-dataset":
             print(forge.build_agent_dataset())
@@ -194,6 +200,16 @@ def run() -> None:
             print(forge.evaluate(rest[0], rest[1] if len(rest) > 1 else "agent-steps"))
         else:
             print("forge-status | forge-dataset | forge-train <name> [dataset] [--now] | forge-eval <model> [dataset]")
+        return
+    if len(sys.argv) >= 2 and sys.argv[1] == "drill":
+        n = int(sys.argv[2]) if len(sys.argv) > 2 else 1
+        for _ in range(n):
+            r = comms.drills.run_one()
+            print(f"{'ok' if r['ok'] else 'skipped'}: {r.get('agent', '')} {r.get('request', '')!r} "
+                  f"{r.get('steps', 0)} lessons. {r.get('final') or r.get('note', '')}"[:400])
+            if not r["ok"]:
+                break
+        print(comms.forge.lessons())
         return
     if len(sys.argv) >= 2 and sys.argv[1] == "cycle":
         print(comms.commander.cycle("manual"))
@@ -214,6 +230,8 @@ def run() -> None:
     sleepers.register(cells["revenue"], [settings.morning_brief], lead_minutes=settings.revenue_lead_minutes)
     sleepers.register(cells["learner"], [settings.learner_time])
     sched.add_job(comms.forge.tick, "interval", minutes=5, id="forge_tick", max_instances=1, coalesce=True)
+    sched.add_job(comms.drills.tick, "interval", minutes=max(5, settings.drill_every_minutes), id="drill_tick",
+                  max_instances=1, coalesce=True)
     sched.add_job(comms.commander.cycle, CronTrigger(hour=f"{settings.commander_hours}/{settings.commander_every_hours}",
                                                      minute=10, timezone=settings.timezone),
                   args=["scheduled check"], id="commander_cycle", misfire_grace_time=1800, coalesce=True, max_instances=1)

@@ -173,6 +173,11 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
             if "revenue" in events.busy:
                 return JSONResponse({"error": "Revenue is already hunting."}, status_code=409)
             run_bg(cells["revenue"].safe_run)
+        elif name == "drill" and getattr(comms, "drills", None) is not None:
+            ok, why = comms.drills.ready()
+            if not ok:
+                return JSONResponse({"error": f"Can't drill right now: {why}."}, status_code=409)
+            run_bg(comms.drills.run_one)
         elif name in ("brief-morning", "brief-evening"):
             kind = name.split("-")[1]
             if "architect" in events.busy:

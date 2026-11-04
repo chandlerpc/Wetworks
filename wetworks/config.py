@@ -86,6 +86,13 @@ class Settings(BaseSettings):
     forge_url: str = "http://forge:8900"
     forge_base_model: str = "unsloth/Qwen3-4B-Instruct-2507"
     forge_window: str = "1-5"
+    # Forge drills: practice runs on Gemini that bank lessons. Gemini's free tier is shared with real
+    # chats and the portfolio recruiter, so drills stop at drill_daily_steps calls a day.
+    drill_enabled: bool = True
+    drill_every_minutes: int = 15
+    drill_hours: str = "7-23"        # local hours, start-end
+    drill_daily_steps: int = 120
+    drill_target: int = 600          # stop drilling once this many lessons are banked
 
     # Command API / ops console. The console refuses to start without a token.
     console_token: str = ""

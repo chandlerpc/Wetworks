@@ -22,7 +22,9 @@ class Traces:
 
     def record(self, agent: str, brain: str, system: str, prompt: str, output: str) -> None:
         d = parse_decision(output)
-        valid = int(bool(d) and ("done" in d or bool(d.get("tool"))))
+        tool = str(d.get("tool") or "")
+        # a lesson only counts if it finishes, or calls a tool that was really on offer
+        valid = int(bool(d) and ("done" in d or (bool(tool) and f"- {tool}:" in system)))
         with self.lock:
             self.db.execute("INSERT INTO traces (ts, agent, brain, system, prompt, output, valid) VALUES (?, ?, ?, ?, ?, ?, ?)",
                             (datetime.now(timezone.utc).isoformat(), agent, brain, system, prompt, output, valid))

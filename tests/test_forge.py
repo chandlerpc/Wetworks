@@ -25,7 +25,7 @@ class Resp(SimpleNamespace):
 def make(tmp_path, n_teacher=0, n_local=0):
     traces = Traces(tmp_path / "traces.db")
     for i in range(n_teacher):
-        traces.record("clair", "gemini", "SYS", f"prompt {i}",
+        traces.record("clair", "gemini", "SYS\nTools:\n- list_missions: List missions.", f"prompt {i}",
                       json.dumps({"tool": "list_missions", "args": {}}) if i % 2 else json.dumps({"done": f"reply {i}"}))
     for i in range(n_local):
         traces.record("cells", "local", "SYS", f"p{i}", "not json")
@@ -51,7 +51,7 @@ def test_dataset_uses_only_valid_teacher_decisions(tmp_path):
     assert info["train"] + info["holdout"] == 200 and info["holdout"] == 20
     lines = (tmp_path / "forge" / "datasets" / "agent-steps.jsonl").read_text().splitlines()
     msg = json.loads(lines[0])["messages"]
-    assert [m["role"] for m in msg] == ["system", "user", "assistant"] and msg[0]["content"] == "SYS"
+    assert [m["role"] for m in msg] == ["system", "user", "assistant"] and msg[0]["content"].startswith("SYS")
     assert f.datasets() == [{"name": "agent-steps", "examples": 180}]
 
 

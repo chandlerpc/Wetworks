@@ -269,6 +269,20 @@ have `search_past_chats` and `read_past_chat`.
   Agents get `research_lead` and `list_leads(status="due")`.
 - The Floor HUD shows Forge lessons: teacher decisions banked toward the 150 a first training run needs.
 
+## Milestone 15: Forge drills
+
+- `wetworks/agent/drills.py`: practice runs that bank teacher lessons. Requests come from a curated set
+  in Patrick's voice, templates filled with real lead names and mission numbers, and full command
+  cycles; least-used first.
+- Same personas, goals and tool descriptions as the live agents, so lessons transfer. Read-only tools
+  run for real; write tools are simulated with realistic replies; gated tools go to a fake approvals
+  desk. Nothing a drill does changes Wetworks.
+- Gemini only (the Worker's step mode). No bridge, a failed call, halt, a busy agent, the daily budget
+  (`drill_daily_steps`), a 429 (paused until tomorrow) or reaching `drill_target` lessons all skip.
+- Traces are tagged `drill:<agent>`. A decision now counts as a lesson only if it finishes or calls a
+  tool that was actually offered.
+- `python -m wetworks.main drill [n]`, `POST /api/actions/drill`, and "Run a drill" on the Forge Operator.
+
 ## Next milestones
 
 1. Claude powering the agents and the Code cell (Friday).

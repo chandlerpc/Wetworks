@@ -92,6 +92,19 @@ docker compose exec architect python -m wetworks.main run revenue
 
 ## The Forge (training)
 
+The Forge learns from lessons: decisions Gemini (and Claude, later) made while driving the agents.
+**Drills** bank them faster: every 15 minutes from 7 AM to 11 PM, C.L.a.i.R or The Architect works a
+practice request on Gemini with the real tools. Looking things up runs for real; anything that would
+change something (missions, memory, messages, approvals, training) is simulated, so drills never
+touch real work. They stop at 120 Gemini calls a day (the free tier is shared with real chats), when
+Gemini says its limit is hit, and once 600 lessons are banked.
+
+Run a few drills now and see the count:
+
+```
+docker compose exec architect python -m wetworks.main drill 3
+```
+
 ```
 docker compose exec architect python -m wetworks.main forge-status
 ```
