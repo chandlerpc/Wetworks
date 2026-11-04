@@ -405,6 +405,14 @@ have `search_past_chats` and `read_past_chat`.
   handbook, architecture doc, README and art spec. Docs and README are now copied into the image.
 - The Architect's and C.L.a.i.R's personas tell them to check it before explaining or changing Wetworks.
 
+## Milestone 25: Check-ins twice a day
+
+- The Architect checks in at `commander_times` (07:30, 21:30) instead of every 2 hours. On Claude, check-ins use
+  `architect_cycle_tier` (work = Sonnet); chats with Patrick stay on Opus.
+- Early check-ins only for major events, capped at `commander_max_extra` (3) a day: failed missions, finished code
+  missions, findings with importance 5, top-fit leads (`FindingsStore.on_add`), and notes from C.L.a.i.R.
+  Routine mission results wait for the next check-in.
+
 ## Next milestones
 
 1. Claude powering the agents and the Code cell (Friday).

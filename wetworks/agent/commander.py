@@ -45,11 +45,15 @@ Keep it to a few sentences unless he asks for more. Your done text is the reply 
 
 class Commander:
     def __init__(self, *, toolbox, ask, approvals, followups, events, context_fn, memory, max_steps=8,
-                 min_gap_minutes=15, paused=None, chat_steps=5, step_tokens=900, uses_gpu=True):
+                 min_gap_minutes=15, paused=None, chat_steps=5, step_tokens=900, uses_gpu=True, cycle_ask=None,
+                 max_extra=3):
         self.paused = paused  # threading.Event set while The Forge trains
         self.halt = None      # wetworks.halt.Halt
         self.toolbox = toolbox
-        self.ask = ask
+        self.ask = ask                    # chats with Patrick (Opus on Claude)
+        self.cycle_ask = cycle_ask or ask  # check-ins (Sonnet on Claude)
+        self.max_extra = max_extra
+        self._extra = {"day": "", "n": 0}
         self.approvals = approvals
         self.followups = followups
         self.events = events
@@ -64,8 +68,8 @@ class Commander:
         self.lock = threading.Lock()
         self._timer: threading.Timer | None = None
 
-    def agent(self, steps: int | None = None) -> Agent:
-        return Agent("architect", PERSONA, self.toolbox, self.ask, approvals=self.approvals,
+    def agent(self, steps: int | None = None, chat: bool = False) -> Agent:
+        return Agent("architect", PERSONA, self.toolbox, self.ask if chat else self.cycle_ask, approvals=self.approvals,
                      events=self.events, max_steps=steps or self.max_steps, step_tokens=self.step_tokens)
 
     def _context(self, query: str = "") -> str:
@@ -118,14 +122,37 @@ class Commander:
         self._timer.daemon = True
         self._timer.start()
 
+    def major(self, reason: str) -> bool:
+        """Something big happened: check in now-ish, up to max_extra extra check-ins a day."""
+        from datetime import date
+
+        today = date.today().isoformat()
+        if self._extra["day"] != today:
+            self._extra = {"day": today, "n": 0}
+        if self._extra["n"] >= self.max_extra:
+            self.events.add("architect", "info", f"Noted for the next check-in (extra check-ins used up today): {reason[:120]}")
+            return False
+        self._extra["n"] += 1
+        self.soon(f"major: {reason}")
+        return True
+
     def on_mission_done(self, mission: dict) -> None:
-        if mission and mission.get("status") in ("done", "failed"):
-            self.soon(f"mission #{mission['id']} {mission['status']}: {mission['title']}")
+        """Routine results wait for the next check-in; failures and finished code missions don't."""
+        if not mission:
+            return
+        if mission.get("status") == "failed":
+            self.major(f"mission #{mission['id']} failed: {mission['title']}")
+        elif mission.get("status") == "done" and mission.get("kind") == "code":
+            self.major(f"code mission #{mission['id']} is ready for review: {mission['title']}")
+
+    @staticmethod
+    def is_major_finding(f) -> bool:
+        return f.importance >= 5 or (f.topic == "Revenue leads" and f.importance >= 4)
 
     # ---- chat ---------------------------------------------------------------
     def chat(self, history: list[dict]) -> str:
         transcript = "\n".join(f"{'Patrick' if m['sender'] == 'patrick' else 'You'}: {m['text']}" for m in history[-12:])
         latest = next((m["text"] for m in reversed(history) if m["sender"] == "patrick"), "")
-        run = self.agent(steps=self.chat_steps).run(CHAT_GOAL.format(transcript=transcript), self._context(latest))
+        run = self.agent(steps=self.chat_steps, chat=True).run(CHAT_GOAL.format(transcript=transcript), self._context(latest))
         return run.final or "I couldn't put an answer together just then. Ask me again?"
 

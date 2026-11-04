@@ -153,8 +153,10 @@ def build(settings):
 
     arch_brain = settings.architect_brain_effective
     on_claude = arch_brain == "claude-api"
-    agent_ask = recorded(make_ask(settings, architect.llm, "architect", brain=arch_brain), traces, "architect",
-                         lambda: "claude" if on_claude else "local")
+    arch_brain_name = lambda: "claude" if on_claude else "local"
+    agent_ask = recorded(make_ask(settings, architect.llm, "architect", brain=arch_brain), traces, "architect", arch_brain_name)
+    cycle_ask = recorded(make_ask(settings, architect.llm, "architect:cycle", brain=arch_brain, tier=settings.architect_cycle_tier),
+                         traces, "architect", arch_brain_name)
 
     toolbox = build_toolbox(llm=architect.llm, memory=memory, missions=missions, open_mission=open_mission,
                             findings=architect.findings, leads=leads, revenue=revenue, notify=architect.notify,
@@ -171,7 +173,9 @@ def build(settings):
                           max_steps=settings.architect_claude_steps if on_claude else settings.agent_max_steps,
                           chat_steps=settings.architect_claude_chat_steps if on_claude else 5,
                           step_tokens=settings.architect_claude_step_tokens if on_claude else 900,
-                          paused=architect.llm.paused, uses_gpu=not on_claude)
+                          paused=architect.llm.paused, uses_gpu=not on_claude, cycle_ask=cycle_ask,
+                          max_extra=settings.commander_max_extra)
+    architect.findings.on_add = lambda f: commander.is_major_finding(f) and commander.major(f"{f.topic}: {f.title}")
     comms.architect_agent = commander.chat
 
     # C.L.a.i.R: her own toolbox (missions she opens report back to her), Gemini brain with local backup.
@@ -331,9 +335,10 @@ def run() -> None:
     sched.add_job(comms.forge.tick, "interval", minutes=5, id="forge_tick", max_instances=1, coalesce=True)
     sched.add_job(comms.drills.tick, "interval", minutes=max(5, settings.drill_every_minutes), id="drill_tick",
                   max_instances=1, coalesce=True)
-    sched.add_job(comms.commander.cycle, CronTrigger(hour=f"{settings.commander_hours}/{settings.commander_every_hours}",
-                                                     minute=10, timezone=settings.timezone),
-                  args=["scheduled check"], id="commander_cycle", misfire_grace_time=1800, coalesce=True, max_instances=1)
+    for i, hhmm in enumerate(t.strip() for t in settings.commander_times.split(",") if t.strip()):
+        name = "morning" if i == 0 else ("night" if i == 1 else f"check {i + 1}")
+        sched.add_job(comms.commander.cycle, _cron(hhmm, settings.timezone), args=[f"{name} check-in"],
+                      id=f"commander_{i}", misfire_grace_time=1800, coalesce=True, max_instances=1)
     sched.start()
     comms.operator.start()
 

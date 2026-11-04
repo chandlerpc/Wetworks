@@ -34,6 +34,7 @@ class FindingsStore:
             )"""
         )
         self.db.execute("CREATE INDEX IF NOT EXISTS findings_url ON findings(url)")
+        self.on_add = None  # callback(Finding) after a new finding is stored
         self.db.commit()
 
     def seen_url(self, url: str, days: int = 14) -> bool:
@@ -52,6 +53,11 @@ class FindingsStore:
             (f.ts, f.cell, f.topic, f.title, f.summary, f.url, f.importance),
         )
         self.db.commit()
+        if self.on_add is not None:
+            try:
+                self.on_add(f)
+            except Exception:
+                pass  # a listener must never stop a finding being stored
         return True
 
     def recent_titles(self, topic: str, days: int = 7, limit: int = 15) -> list[str]:

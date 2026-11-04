@@ -75,8 +75,9 @@ class Settings(BaseSettings):
     code_repair_rounds: int = 1
     sandbox_url: str = "http://sandbox:8800"
 
-    # Agents. agent_brain: local (free) | claude-api (paid, budget-capped). Commander cycles run every
-    # commander_every_hours during commander_hours (local time), and after missions finish.
+    # Agents. agent_brain: local (free) | claude-api (paid, budget-capped). The Architect checks in at
+    # commander_times (local), plus up to commander_max_extra extra check-ins a day when something major
+    # happens (a failed mission, a finished code mission, an act-today finding, a top-fit lead).
     agent_brain: str = "local"
     agent_max_steps: int = 8
     # The Architect can think on his own brain. "" = same as agent_brain. claude-api uses the think tier
@@ -89,8 +90,9 @@ class Settings(BaseSettings):
     @property
     def architect_brain_effective(self) -> str:
         return self.architect_brain or self.agent_brain
-    commander_hours: str = "8-22"
-    commander_every_hours: int = 2
+    commander_times: str = "07:30,21:30"
+    commander_max_extra: int = 3
+    architect_cycle_tier: str = "work"   # check-ins on Claude: work = Sonnet; chats with Patrick use think (Opus)
     agent_daily_missions: int = 6
     cells_agentic: bool = True      # Intel, Revenue and Splinter research run as agents
 

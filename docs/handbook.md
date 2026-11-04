@@ -167,7 +167,7 @@ debugging), `workspaces/` and `sandbox-runs/` (code missions), `HALTED` (kill sw
 
 | Who | Brain | Setting |
 |---|---|---|
-| The Architect | Claude Opus 5.5 (since Nov 4 test) or local | `WETWORKS_ARCHITECT_BRAIN` (falls back to `AGENT_BRAIN`) |
+| The Architect | Chat: Claude Opus 5.5; check-ins: Claude Sonnet 5.5 (since Nov 4); or local | `WETWORKS_ARCHITECT_BRAIN` (falls back to `AGENT_BRAIN`), `WETWORKS_ARCHITECT_CYCLE_TIER` |
 | Cells, Splinter research | Local `gemma4:12b` | `WETWORKS_AGENT_BRAIN` |
 | Code cell | Local (weak at code) or Claude Sonnet | `WETWORKS_CODE_BRAIN` (`claude-code` on Max planned Friday) |
 | C.L.a.i.R | Gemini 2.5 Flash via her Worker's step mode; local backup | `WETWORKS_CLAIR_URL` / `_TOKEN` |
@@ -176,7 +176,8 @@ debugging), `workspaces/` and `sandbox-runs/` (code missions), `HALTED` (kill sw
 
 Claude tiers: route `claude-haiku-5-5`, work `claude-sonnet-5-5`, think `claude-opus-5-5`. Ledger prices
 per million tokens: Opus $4 / $20, Sonnet $2 / $10, Haiku $0.10 / $0.50. A deep Architect chat answer on
-Opus costs roughly $0.30 to $0.90; his scheduled check-ins every 2 hours cost roughly $3 to $5 a day.
+Opus costs roughly $0.30 to $0.90. His two daily check-ins run on Sonnet (about half Opus's price),
+roughly $0.30 to $0.60 a day plus any extra check-ins for major events.
 
 On Claude, The Architect gets 14 steps per cycle, 10 per chat reply, 3,500 tokens per step, and keeps
 working while The Forge trains. On the local model: 8 per cycle, 5 per chat, 900 tokens per step.
@@ -189,8 +190,10 @@ reasoning and returned "(no reply)"); an empty answer is retried once with more 
 ## 6. Every agent and room
 
 ### The Architect (Command Deck)
-Plans, delegates, reviews and reports; never does bulk work himself. **Check-ins** every 2 hours,
-08:00 to 22:00, plus two minutes after any mission finishes: review findings, leads, missions, follow-ups
+Plans, delegates, reviews and reports; never does bulk work himself. **Check-ins** twice a day at 07:30
+and 21:30 (`WETWORKS_COMMANDER_TIMES`) on Sonnet, plus an early check-in only when something major happens
+(a failed mission, a finished code mission, an act-today finding, a top-fit lead, a note from C.L.a.i.R),
+at most 3 extra a day (`WETWORKS_COMMANDER_MAX_EXTRA`); routine results wait. Each check-in: review findings, leads, missions, follow-ups
 and memory against the priorities; open at most 2 missions per cycle (3 open at once, 6 per day); leave
 follow-ups; report to the activity feed; Discord only for what needs action today. **Chat**: Patrick's
 Architect channel runs him as an agent with the same tools. His persona: decisive but economical, every
@@ -326,7 +329,7 @@ Opens after Claude is connected (Friday): design docs and prototype code need a 
 
 | When | What |
 |---|---|
-| Every 2 h, 08:10 to 22:10 | The Architect's check-in (and 2 min after any mission finishes) |
+| 07:30 / 21:30 | The Architect's check-ins on Sonnet (plus up to 3 early ones a day for major events) |
 | 06:15 | Revenue hunt (45 min before the morning brief) |
 | 06:30 | The Writer (30 min before) |
 | 06:40 | Intel (20 min before each brief); The Bookkeeper (20 min before) |

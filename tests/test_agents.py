@@ -209,3 +209,26 @@ def test_architect_can_think_on_claude_while_cells_stay_local(tmp_path):
     assert "isn't shared" in c.toolbox.tools["dayjob_search"].fn(query="x")
     architect.llm.paused.set()                                                         # Forge training
     assert "Skipped" not in c.cycle("manual")
+
+
+def test_checkins_twice_a_day_on_sonnet_and_only_major_events_jump_the_queue(tmp_path):
+    from wetworks.config import Settings
+    from wetworks.findings import Finding
+    from wetworks.main import build
+
+    s = Settings(dry_run=True, data_dir=tmp_path, config_dir="config", architect_brain="claude-api")
+    architect, cells, comms = build(s)
+    c = comms.commander
+    assert c.cycle_ask("sys", "hi", 20).startswith("[dry-run claude-sonnet-5-5]")   # check-ins on Sonnet
+    assert c.ask("sys", "hi", 20).startswith("[dry-run claude-opus-5-5]")          # chatting with Patrick on Opus
+    queued = []
+    c.soon = lambda reason, delay_seconds=120: queued.append(reason)
+    c.on_mission_done({"id": 1, "status": "done", "kind": "research", "title": "Clinic list"})
+    assert queued == []                                                             # routine: waits for the check-in
+    c.on_mission_done({"id": 2, "status": "failed", "kind": "research", "title": "Broken"})
+    c.on_mission_done({"id": 3, "status": "done", "kind": "code", "title": "Footer"})
+    architect.findings.add(Finding(cell="intel", topic="AI models & tools", title="Minor", summary="", url="https://a.example/1", importance=3))
+    architect.findings.add(Finding(cell="intel", topic="Money opportunities", title="Deadline today", summary="", url="https://a.example/2", importance=5))
+    assert [q.split(":")[1].strip()[:4] for q in queued] == ["miss", "code", "Mone"]
+    architect.findings.add(Finding(cell="revenue", topic="Revenue leads", title="Fit-5 clinic", summary="", url="https://a.example/3", importance=4))
+    assert len(queued) == 3                                                          # 3 extra a day, then it waits
