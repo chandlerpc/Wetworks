@@ -111,6 +111,7 @@ class Comms:
         self.context_fn = context_fn
         self.memory = memory
         self.architect_agent = None  # set to Commander.chat to make the Architect channel agentic
+        self.clair_agent = None      # set to ClairAgent.chat to make C.L.a.i.R agentic
 
     def _insert(self, channel: str, sender: str, text: str) -> int:
         with self.lock:
@@ -161,6 +162,10 @@ class Comms:
             json_mode = self.open_mission is not None
             try:
                 bridged = None
+                if channel == "clair" and self.clair_agent is not None:
+                    text, mission = self.clair_agent(history), None
+                    self._insert(channel, channel, text or "Sorry, say that again?")
+                    return
                 if channel == "clair" and self.bridge:
                     try:
                         bridged = self.bridge.ask(history, status)

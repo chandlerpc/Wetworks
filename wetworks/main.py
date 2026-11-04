@@ -19,6 +19,8 @@ from .bridge import ClairBridge
 from .cells.base import CellContext
 from .cells.intel import Intel
 from .cells.learner import Learner
+from .agent.brains import clair_ask, make_ask
+from .agent.clair import ClairAgent
 from .agent.commander import Commander
 from .agent.state import Approvals, Followups
 from .agent.toolkit import build_toolbox
@@ -49,7 +51,7 @@ def build(settings):
     loaded = memory.sync_profile(settings.config_dir / "profile.md")
     log.info("Memory: %d profile lines, %d memories total", loaded, memory.count())
     ctx = CellContext(settings=settings, llm=architect.llm, findings=architect.findings, events=architect.events,
-                      memory=memory)
+                      memory=memory, ask=make_ask(settings, architect.llm, "cells"))
     intel = Intel(ctx)
     leads = LeadStore(settings.data_dir / "leads.db")
     revenue = Revenue(ctx, leads)
@@ -87,10 +89,7 @@ def build(settings):
     approvals = Approvals(settings.data_dir / "agents.db", on_request=notify_approval)
     followups = Followups(settings.data_dir / "agents.db")
 
-    def agent_ask(system: str, prompt: str, max_tokens: int) -> str:
-        if settings.agent_brain == "claude-api":
-            return architect.llm.ask("agent", prompt, tier="think", system=system, max_tokens=max_tokens).text
-        return architect.llm.ask_local("agent", prompt, system=system, json_mode=True, max_tokens=max_tokens).text
+    agent_ask = make_ask(settings, architect.llm, "architect")
 
     toolbox = build_toolbox(llm=architect.llm, memory=memory, missions=missions, open_mission=open_mission,
                             findings=architect.findings, leads=leads, revenue=revenue, notify=architect.notify,
@@ -102,6 +101,23 @@ def build(settings):
                           events=architect.events, context_fn=architect.context_block, memory=memory,
                           max_steps=settings.agent_max_steps)
     comms.architect_agent = commander.chat
+
+    # C.L.a.i.R: her own toolbox (missions she opens report back to her), Gemini brain with local backup.
+    def clair_mode(mode: str, why: str) -> None:
+        if mode != comms.clair_mode:
+            msg = {"cloudflare": "Thinking on Cloudflare (Gemini) again",
+                   "fallback": f"Cloudflare unavailable ({why}); thinking on the local model",
+                   "local": "Thinking on the local model (no Cloudflare bridge configured)"}[mode]
+            architect.events.add("clair", "warn" if mode == "fallback" else "info", msg)
+        comms.clair_mode = mode
+
+    clair_tools = build_toolbox(llm=architect.llm, memory=memory, missions=missions, open_mission=open_mission,
+                                findings=architect.findings, leads=leads, revenue=revenue, notify=architect.notify,
+                                followups=followups, agent_name="clair", daily_mission_cap=settings.agent_daily_missions,
+                                commander=commander)
+    clair = ClairAgent(toolbox=clair_tools, ask=clair_ask(bridge, make_ask(settings, architect.llm, "clair"), clair_mode),
+                       approvals=approvals, events=architect.events, context_fn=architect.context_block, memory=memory)
+    comms.clair_agent = clair.chat
     previous_done = operator.on_done
 
     def on_done(m: dict) -> None:

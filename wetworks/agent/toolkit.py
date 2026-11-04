@@ -7,7 +7,7 @@ from .runtime import Tool, Toolbox
 
 
 def build_toolbox(*, llm, memory, missions, open_mission, findings, leads, revenue, notify,
-                  followups, workspace=None, agent_name="architect", daily_mission_cap=6) -> Toolbox:
+                  followups, workspace=None, agent_name="architect", daily_mission_cap=6, commander=None) -> Toolbox:
     t = Toolbox()
 
     # ---- looking things up ---------------------------------------------------
@@ -101,8 +101,18 @@ def build_toolbox(*, llm, memory, missions, open_mission, findings, leads, reven
         notify.send(f"🛰️ **{agent_name.title()}**: {message}")
         return "Sent to Patrick."
 
-    t.add(Tool("tell_patrick", "Send Patrick a short message (Discord). Only for things he needs to know now.",
-               {"message": "what to tell him"}, tell_patrick))
+    if agent_name != "clair":  # C.L.a.i.R is already talking to him
+        t.add(Tool("tell_patrick", "Send Patrick a short message (Discord). Only for things he needs to know now.",
+                   {"message": "what to tell him"}, tell_patrick))
+
+    if commander is not None:
+        def tell_architect(note):
+            followups.add("architect", f"From {agent_name}: {note}", 0.25)
+            commander.soon(f"note from {agent_name}: {note[:80]}", delay_seconds=60)
+            return "Passed to The Architect; he'll pick it up within a few minutes."
+
+        t.add(Tool("tell_architect", "Hand something to The Architect: strategy, priorities, or work that needs "
+                   "several missions coordinated.", {"note": "what he should know or do"}, tell_architect))
 
     # ---- gated: leaves Wetworks or can't be undone ------------------------------
     if workspace is not None:

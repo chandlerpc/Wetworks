@@ -18,6 +18,7 @@ class CellContext:
     findings: FindingsStore
     events: EventLog | None = None
     memory: object | None = None  # wetworks.memory.Memory
+    ask: object | None = None     # agent brain: ask(system, prompt, max_tokens) -> text; None = fixed routines
 
 
 class Cell(ABC):

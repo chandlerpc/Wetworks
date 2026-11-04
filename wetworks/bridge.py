@@ -69,3 +69,27 @@ class ClairBridge:
         if not reply:
             raise BridgeError("C.L.a.i.R's Worker sent an empty reply")
         return reply, mission
+
+    def step(self, system: str, prompt: str, max_tokens: int = 900) -> str:
+        """One agent decision from C.L.a.i.R's brain (Gemini via the Worker's step mode)."""
+        try:
+            r = httpx.post(
+                self.url,
+                headers={"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"},
+                json={"mode": "step", "system": system, "prompt": prompt, "max_tokens": max_tokens},
+                timeout=self.timeout,
+            )
+        except httpx.HTTPError as e:
+            raise BridgeError(f"couldn't reach C.L.a.i.R's Worker ({type(e).__name__})") from e
+        if r.status_code == 401:
+            raise BridgeError("C.L.a.i.R's Worker rejected the bridge key")
+        if r.status_code == 429:
+            raise BridgeError("Gemini's free-tier limit was hit")
+        if r.status_code in (400, 403, 404) and "Expected" not in r.text:
+            raise BridgeError("the Worker doesn't support agent steps yet (deploy the updated clair-worker.js)")
+        if r.status_code != 200:
+            raise BridgeError(f"C.L.a.i.R's Worker answered {r.status_code}")
+        text = str(r.json().get("text") or "").strip()
+        if not text:
+            raise BridgeError("empty answer")
+        return text

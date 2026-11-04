@@ -80,6 +80,7 @@ class Settings(BaseSettings):
     commander_hours: str = "8-22"
     commander_every_hours: int = 2
     agent_daily_missions: int = 6
+    cells_agentic: bool = True      # Intel, Revenue and Splinter research run as agents
 
     # Command API / ops console. The console refuses to start without a token.
     console_token: str = ""

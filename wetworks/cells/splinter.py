@@ -54,6 +54,11 @@ class MissionResult:
     sources: list[dict] = field(default_factory=list)
 
 
+def Toolboxed(tools):
+    from ..agent.runtime import Toolbox
+    return Toolbox(tools)
+
+
 class Cancelled(Exception):
     pass
 
@@ -89,6 +94,10 @@ class Splinter:
         mid = mission["id"]
         today = date.today().isoformat()
 
+        if self.ctx.ask is not None and self.ctx.settings.cells_agentic:
+            sources, deliverable = self._research_agent(mission, today)
+            return self._write(mission, sources, deliverable)
+
         # 1. Plan
         self._step(mid, "Planning the approach")
         raw = self._ask(mid, PLAN_PROMPT.format(title=mission["title"], request=mission["request"], today=today),
@@ -119,6 +128,53 @@ class Splinter:
             self._step(mid, f"Collected {len(sources)} results and read {read} pages")
             self._check(mid)
 
+        return self._write(mission, sources, deliverable)
+
+    def _research_agent(self, mission: dict, today: str) -> tuple[list[dict], str]:
+        """The research phase as an agent: it decides whether to research, what to search and what to read."""
+        from ..agent.research import Research
+        from ..agent.runtime import Agent, Tool
+
+        mid = mission["id"]
+        research = Research(self.ctx.llm, getattr(self.ctx, "memory", None), time_range="month", max_results=6)
+        step = self._step
+
+        def logged(tool):  # mirror each tool call into the mission's step log, and honour cancel
+            fn = tool.fn
+
+            def wrapped(**kw):
+                self._check(mid)
+                label = {"search_web": "Searching: {query}", "read_page": "Reading {url}",
+                         "recall": "Checking memory: {query}"}.get(tool.name, tool.name)
+                try:
+                    step(mid, label.format(**{k: str(v)[:90] for k, v in kw.items()}))
+                except (KeyError, IndexError):
+                    step(mid, tool.name)
+                return fn(**kw)
+            return Tool(tool.name, tool.description, tool.params, wrapped)
+
+        tools = [logged(t) for t in research.tools()]
+        goal = (f"Mission: {mission['title']}\nPatrick's request:\n{mission['request']}\n\nToday is {today}. Gather "
+                "what's needed to do this well. If it needs current facts (prices, people, companies, jobs, products, "
+                "news), search with specific queries and read the 2-4 most useful pages. If it's a pure writing or "
+                "thinking task, don't search. When you have enough, finish with done: one sentence saying exactly what "
+                "you'll hand Patrick.")
+        self._step(mid, "Planning the research")
+        agent = Agent(f"splinter:{mid}", "You are a Splinter operative in Wetworks researching one mission for Patrick. "
+                      "Be efficient: no repeated searches, no reading pages that don't help.",
+                      Toolboxed(tools), self.ctx.ask, events=None, max_steps=8)
+        run = agent.run(goal)
+        self._check(mid)
+        read = [dict(v, url=u) for u, v in research.seen.items() if v.get("page")]
+        rest = [dict(v, url=u) for u, v in research.seen.items() if not v.get("page")]
+        sources = (read + rest)[: self.MAX_RESULTS]
+        if research.searches:
+            self._step(mid, f"Collected {len(research.seen)} results and read {len(read)} pages")
+        deliverable = run.final.strip() or "A clear, useful answer to the request."
+        return sources, deliverable
+
+    def _write(self, mission: dict, sources: list[dict], deliverable: str) -> MissionResult:
+        mid = mission["id"]
         # 3. Write
         self._step(mid, "Writing it up")
         mem = getattr(self.ctx, "memory", None)

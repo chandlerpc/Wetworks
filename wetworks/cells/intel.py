@@ -116,9 +116,62 @@ class Intel(Cell):
         return new
 
     def _run_topic(self, topic: dict) -> list[Finding]:
+        if self.ctx.ask is not None and self.ctx.settings.cells_agentic:
+            found, searched = self._run_topic_agent(topic)
+            if searched:
+                return found
+            self.log.warning("Intel agent didn't use its tools for %r; running the fixed routine", topic["name"])
         if self.ctx.settings.provider == "local":
             return self._run_topic_local(topic)
         return self._run_topic_paid(topic)
+
+    def _run_topic_agent(self, topic: dict) -> tuple[list[Finding], bool]:
+        """Intel as an agent: it decides what to search, what to read and what's worth recording."""
+        from ..agent.research import Research
+        from ..agent.runtime import Agent, Tool
+
+        name = topic["name"]
+        max_items = int(topic.get("max_items", 3))
+        research = Research(self.ctx.llm, self.ctx.memory, time_range=topic.get("time_range", "week"))
+        stored: list[Finding] = []
+
+        def record_finding(title, summary, url, importance=3):
+            if len(stored) >= max_items:
+                return f"You've recorded {max_items} findings for this topic, the limit. Finish now."
+            if not research.known(url):
+                return "That URL didn't come up in your searches. Only record pages you actually found."
+            if self.ctx.findings.seen_url(url):
+                return "Already reported recently; skip it."
+            try:
+                imp = max(1, min(5, int(importance)))
+            except (TypeError, ValueError):
+                imp = 3
+            f = Finding(cell=self.name, topic=name, title=str(title).strip()[:200],
+                        summary=str(summary).strip()[:600], url=str(url), importance=imp)
+            if self.ctx.findings.add(f):
+                stored.append(f)
+                return f"Recorded ({len(stored)}/{max_items})."
+            return "Couldn't record that."
+
+        seen = self.ctx.findings.recent_titles(name) or ["(none)"]
+        goal = (f"Topic: {name}\nWhat Patrick wants to know:\n{topic.get('brief', name).strip()}\n\n"
+                f"Today is {date.today().isoformat()}. Find what's genuinely new and important here, from the last "
+                f"few days. Search with your own specific queries (ideas: {', '.join(topic.get('queries') or [name])}), "
+                f"read a page when a snippet isn't enough to judge it, and record at most {max_items} findings with "
+                "record_finding. importance: 5 = act today, 4 = act this week, 3 = useful, 2 = minor. Skip ads, "
+                "listicles and anything already reported:\n" + "\n".join(f"- {t}" for t in seen)
+                + "\nRecording nothing is fine if nothing qualifies. Finish with done and one line on what you found.")
+        agent = Agent(f"intel:{name}", "You are the Intel operative in Wetworks, Patrick's ops center. You report "
+                      "only verifiable, recent, specific findings from real pages.",
+                      research.toolbox([Tool("record_finding", "Record a finding for Patrick's brief.",
+                                             {"title": "short headline", "summary": "1-2 sentences: what happened and "
+                                              "why it matters to Patrick", "url": "the page's URL from your results",
+                                              "importance": "1-5"}, record_finding)]),
+                      self.ctx.ask, events=None, max_steps=7)
+        run = agent.run(goal)
+        self.log.info("Intel agent %r: %d recorded, %d searches, %d pages, %d steps", name, len(stored),
+                      research.searches, research.pages, len(run.steps))
+        return stored, research.searches > 0
 
     def _store(self, name: str, items: list[dict], max_items: int) -> list[Finding]:
         stored = []

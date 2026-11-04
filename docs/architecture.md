@@ -198,10 +198,31 @@ Wetworks moves from fixed pipelines to agents that choose their own steps.
 - The Architect's chat channel now runs as an agent with the same tools.
 - Reality check: the free 12B model handles short loops; long autonomous chains need Claude (Friday).
 
+## Milestone 11: Everything agentic
+
+Every part of Wetworks now decides its own steps with tools:
+
+| Agent | Brain | Tools | Notes |
+|---|---|---|---|
+| The Architect (cycles + chat) | `WETWORKS_AGENT_BRAIN` | full toolbox incl. gated merge | commander |
+| C.L.a.i.R (chat + voice) | Gemini via her Worker's step mode; local fallback | missions, leads, findings, memory, web, `tell_architect` | missions she opens report back to her |
+| Intel (per topic) | agent brain | search, read, recall, `record_finding` | writes its own queries |
+| Revenue | agent brain | search, read, recall, `record_lead` | drafts outreach for strong fits |
+| Splinter research | agent brain | search, read, recall | decides whether and what to research; writer then writes |
+| Code cell | code brain | plan → edit → test → repair | already iterative |
+
+- `wetworks/agent/research.py`: research tools scoped to one run. Every URL an agent sees is tracked,
+  and findings and leads can only point at those URLs, so links are always real.
+- If the model can't drive its tools at all (no searches), Intel and Revenue fall back to their fixed
+  routines for that run, so a bad day for the local model never means an empty brief.
+- `WETWORKS_CELLS_AGENTIC=false` switches the cells back to fixed routines.
+- C.L.a.i.R's Worker (`clair-worker.js`) has a `mode: "step"` on the private route: one agent decision
+  per call. Gemini's free tier limits how many steps she can take per day; when it's hit she thinks on
+  the local model and the console says so.
+
 ## Next milestones
 
 1. Claude powering the agents and the Code cell (Friday).
-2. Convert Intel and Revenue from fixed steps to agents with goals.
 2. One-time import of Mac notes and documents into memory.
 2. Revenue follow-ups: reminders for contacted leads, and a Splinter that researches a lead
    in depth before you reach out (Sleeper), fed by Intel's money findings.
