@@ -269,7 +269,8 @@ def run() -> None:
 
     app = create_app(settings=settings, architect=architect, cells=cells, comms=comms,
                      events=architect.events, scheduler=sched, missions=comms.missions,
-                     open_mission=comms.open_mission_fn, voice=Voice(settings, architect.ledger), leads=comms.leads,
+                     open_mission=comms.open_mission_fn, voice=Voice(settings, architect.ledger,
+                                                                 vocab_fn=lambda: [l["business"] for l in comms.leads.recent(limit=12)]), leads=comms.leads,
                      memory=comms.memory, approvals=comms.approvals, commander=comms.commander, forge=comms.forge,
                      halt=comms.halt)
     log.info("Console listening on port %d", settings.console_port)

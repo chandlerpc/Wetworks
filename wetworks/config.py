@@ -57,6 +57,8 @@ class Settings(BaseSettings):
     # Voice. Hearing: Whisper container on the GPU. Speaking: Azure neural TTS (free tier
     # 500k characters/month; the cap below stops speech a little before that).
     whisper_url: str = "http://whisper:9000"
+    whisper_fast_url: str = "http://whisper-fast:9000"  # small model for wake-phrase checks ("" = off)
+    voice_vocab: str = ""  # extra names for Whisper, comma separated (people, businesses, games)
     azure_speech_key: str = ""
     azure_speech_region: str = ""
     voice_name: str = "en-IE-EmilyNeural"

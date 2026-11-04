@@ -27,6 +27,8 @@ function matchWake(text, wakePhrase) {
     if (m) { idx = m.index; len = m[0].length; }
   }
   if (idx < 0) return null;
+  // She's being addressed only if the wake phrase opens the utterance (allow "um, okay, so").
+  if (t.slice(0, idx).trim().split(" ").filter(Boolean).length > 2) return null;
   return { rest: t.slice(idx + len).replace(/^[\s,]+/, "").trim() };
 }
 
@@ -101,6 +103,13 @@ if (typeof window !== "undefined") (() => {
     o.start(t); o.stop(t + 0.24);
   }
   let lastNote = "";
+  async function fetchVoice(text) {
+    try {
+      const r = await rawFetch("/api/voice/say", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+      if (!r.ok) { const e = await r.json().catch(() => ({})); lastNote = e.error || "Voice unavailable; reply is on screen."; return null; }
+      return await r.arrayBuffer();
+    } catch { lastNote = "Couldn't reach her voice; reply is on screen."; return null; }
+  }
   async function speak(text) {
     if (!text) return;
     if (!cfg.speak) {  // maybe the Azure key was added since the page loaded
@@ -108,12 +117,18 @@ if (typeof window !== "undefined") (() => {
       if (!cfg.speak) { lastNote = "Her voice isn't set up on the MSI yet (Azure key), so replies are text only."; return; }
     }
     say("C.L.a.i.R is speaking", "live");
-    let bytes;
-    try {
-      const r = await rawFetch("/api/voice/say", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
-      if (!r.ok) { const e = await r.json().catch(() => ({})); lastNote = e.error || "Voice unavailable; reply is on screen."; return; }
-      bytes = await r.arrayBuffer();
-    } catch { lastNote = "Couldn't reach her voice; reply is on screen."; return; }
+    // First sentence plays while the rest is being voiced.
+    let chunks = [text];
+    try { chunks = (await window.WW.api("/api/voice/plan", { method: "POST", body: JSON.stringify({ text }) })).chunks || [text]; } catch {}
+    let next = fetchVoice(chunks[0]);
+    for (let i = 0; i < chunks.length; i++) {
+      const bytes = await next;
+      next = i + 1 < chunks.length ? fetchVoice(chunks[i + 1]) : null;
+      if (!bytes) return;
+      await play(bytes);
+    }
+  }
+  async function play(bytes) {
     try {
       await wake();
       const buf = await decode(bytes.slice(0));
@@ -152,9 +167,9 @@ if (typeof window !== "undefined") (() => {
     rec.start();
     return { rec, done, started: performance.now() };
   }
-  async function transcribe(blob) {
-    say("Transcribing", "live");
-    const r = await rawFetch("/api/voice/transcribe", { method: "POST", headers: { "Content-Type": blob.type || "audio/webm" }, body: blob });
+  async function transcribe(blob, quick = false) {
+    if (!quick) say("Transcribing", "live");
+    const r = await rawFetch(`/api/voice/transcribe${quick ? "?quick=1" : ""}`, { method: "POST", headers: { "Content-Type": blob.type || "audio/webm" }, body: blob });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || "Couldn't transcribe that.");
     return (j.text || "").trim();
@@ -241,13 +256,18 @@ if (typeof window !== "undefined") (() => {
   async function handleUtterance(blob) {
     busy = true;
     try {
-      const text = await transcribe(blob);
+      // Waiting for the wake phrase: check with the quick model; only her requests get the accurate one.
+      const text = await transcribe(blob, mode === "wake");
       if (!text) return;
       if (mode === "wake") {
         const m = matchWake(text, cfg.wake_phrase);
-        if (!m) { say(`Heard: "${text.slice(0, 60)}"`, ""); await new Promise((r) => setTimeout(r, 2500)); return; }
+        if (!m) { say(`Heard: "${text.slice(0, 60)}"`, ""); await new Promise((r) => setTimeout(r, 1500)); return; }
         mode = "convo"; beep(true); idleReset();
-        if (m.rest.split(" ").length >= 2) await send(m.rest);
+        if (m.rest.split(" ").length >= 2) {  // "hey clair, what's on today": hear the request properly
+          let rest = m.rest;
+          try { const full = await transcribe(blob); const fm = matchWake(full, cfg.wake_phrase); rest = fm ? fm.rest : full || rest; } catch {}
+          if (rest.split(" ").length >= 2) await send(rest);
+        }
       } else if (mode === "convo") {
         if (matchStop(text, cfg.stop_phrases)) {
           mode = "wake"; clearTimeout(idleTimer);
@@ -284,10 +304,13 @@ if (typeof window !== "undefined") (() => {
     const quiet = rms < Math.max(0.008, floor * 2);
     if (quiet) { quietSince = quietSince || now; } else quietSince = 0;
     const len = now - recorder.started;
-    if ((quietSince && now - quietSince > 1100) || len > 25000) {
+    // In wake mode "hey clair, ..." is short; long stretches are the room talking, so drop them.
+    const maxLen = mode === "wake" ? 8000 : 25000;
+    if ((quietSince && now - quietSince > 1100) || len > maxLen) {
       const r = recorder; recorder = null; loud = 0;
+      const tooLong = mode === "wake" && len > maxLen;
       r.rec.stop();
-      r.done.then((blob) => { if (len < 500) { settle(); return; } handleUtterance(blob); });
+      r.done.then((blob) => { if (len < 500 || tooLong) { settle(); return; } handleUtterance(blob); });
     }
   }
   async function handsFreeOn() {

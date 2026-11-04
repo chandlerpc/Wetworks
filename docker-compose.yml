@@ -20,6 +20,7 @@ services:
       - ollama
       - searxng
       - whisper
+      - whisper-fast
       - sandbox
     logging: &logging
       driver: json-file
@@ -54,6 +55,19 @@ services:
     environment:
       ASR_ENGINE: faster_whisper
       ASR_MODEL: ${WHISPER_MODEL:-medium.en}   # small.en (faster) or medium.en (more accurate)
+    volumes:
+      - whisper-models:/root/.cache
+    logging: *logging
+
+  # Small, quick model that only listens for "hey clair" in hands-free mode, so the room's chatter
+  # doesn't queue up behind the accurate model. What you say to her still goes to medium.en.
+  whisper-fast:
+    image: onerahmet/openai-whisper-asr-webservice:latest
+    container_name: wetworks-whisper-fast
+    restart: unless-stopped
+    environment:
+      ASR_ENGINE: faster_whisper
+      ASR_MODEL: ${WHISPER_FAST_MODEL:-base.en}
     volumes:
       - whisper-models:/root/.cache
     logging: *logging

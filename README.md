@@ -62,6 +62,17 @@ Say "That's all, Clair" (or stay quiet for 90 seconds) to end. She answers in an
 (Azure `en-IE-EmilyNeural`). Set `AZURE_SPEECH_KEY` and `AZURE_SPEECH_REGION` in `.env`;
 without them she still hears you and replies in text.
 
+Hearing runs on two Whisper models on the MSI: a quick one (`base.en`) that only listens for
+"Hey Clair", and an accurate one (`medium.en`) for what you actually say to her. "Hey Clair" only
+counts at the start of what you say, so a TV or a story that mentions her won't wake her. Whisper
+is told to expect Wetworks words plus your current lead names; add more in `.env`:
+
+```
+WETWORKS_VOICE_VOCAB=Sydney, Gregg, Perry, Black Desert Online, Novarad
+```
+
+The activity feed shows how long each transcription took ("Heard in 1.4s").
+
 ## Code missions
 
 Choose **Code** in Missions (or ask C.L.a.i.R / The Architect to change Wetworks). A Splinter team

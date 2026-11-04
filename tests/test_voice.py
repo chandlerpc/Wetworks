@@ -123,3 +123,53 @@ def test_azure_settings_are_cleaned(monkeypatch, tmp_path):
     monkeypatch.setenv("WETWORKS_DATA_DIR", str(tmp_path))
     s = load_settings()
     assert s.azure_speech_key == "abc123" and s.azure_speech_region == "eastus"
+
+
+def test_clean_transcript_drops_ghosts_and_fixes_names():
+    from wetworks.voice import clean_transcript
+
+    for ghost in ["Thank you.", " you ", "Thanks for watching!", "[BLANK_AUDIO]", "(music)", "Bye.", ""]:
+        assert clean_transcript(ghost) == "", ghost
+    assert clean_transcript("Thank you, can you check the leads?") == "Thank you, can you check the leads?"
+    assert clean_transcript("Ask the architects about wet works") == "Ask The Architect about Wetworks"
+    assert clean_transcript("hey c.l.a.i.r what's the forage doing") == "hey Clair what's The Forge doing"
+
+
+def test_speech_chunks_lead_with_a_short_first_sentence():
+    from wetworks.voice import speech_chunks
+
+    assert speech_chunks("Short reply.") == ["Short reply."]
+    text = ("Two leads look good today. Lake Mary Family Dental is hiring a second front-desk person and "
+            "Sunrise Spa needs booking help. I've queued research on both. Want the drafts?")
+    first, rest = speech_chunks(text)
+    assert first.startswith("Two leads") and first.endswith("booking help.") and rest.startswith("I've queued")
+
+
+def test_quick_transcribe_uses_fast_model_with_fallback_and_lead_names(tmp_path, monkeypatch):
+    import httpx
+
+    v = Voice(Settings(data_dir=tmp_path), Ledger(tmp_path / "l.db"), vocab_fn=lambda: ["Sunrise Spa"])
+    urls = []
+
+    def post(url, params, files, timeout):
+        urls.append((url, params["initial_prompt"]))
+        if "whisper-fast" in url and len(urls) > 1:
+            raise httpx.HTTPError("down")
+        return SimpleNamespace(raise_for_status=lambda: None, json=lambda: {"text": "Hey Clair"})
+
+    monkeypatch.setattr("wetworks.voice.httpx.post", post)
+    assert v.transcribe(b"a", quick=True) == "Hey Clair"
+    assert urls[0][0] == "http://whisper-fast:9000/asr" and "Sunrise Spa" in urls[0][1]
+    assert not list((tmp_path / "voice").glob("heard-*")) if (tmp_path / "voice").exists() else True  # wake checks aren't kept
+    assert v.transcribe(b"a", quick=True) == "Hey Clair"  # fast model down: main model answers
+    assert urls[-1][0] == "http://whisper:9000/asr"
+
+
+def test_voice_plan_api(tmp_path):
+    app, architect, comms = make(tmp_path)
+    from wetworks.api import create_app
+
+    app = create_app(settings=architect.s, architect=architect, cells={}, comms=comms, events=architect.events,
+                     voice=Voice(architect.s, architect.ledger))
+    r = call(app, "POST", "/api/voice/plan", token="secret", body={"text": "**Done.** Mission #4 opened. " + "More. " * 40})
+    assert r["status"] == 200 and r["json"]["chunks"][0].startswith("Done. Mission number 4 opened.")

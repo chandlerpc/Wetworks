@@ -283,6 +283,18 @@ have `search_past_chats` and `read_past_chat`.
   tool that was actually offered.
 - `python -m wetworks.main drill [n]`, `POST /api/actions/drill`, and "Run a drill" on the Forge Operator.
 
+## Milestone 16: C.L.a.i.R's hearing, tuned
+
+- Two Whisper services: `whisper-fast` (`base.en`) for wake checks (`/api/voice/transcribe?quick=1`,
+  not logged, not kept), `whisper` (`medium.en`) for requests. Quick falls back to the main model.
+- On a wake hit with words after it, the same clip is re-transcribed accurately before sending.
+  Wake-mode clips longer than 8 s are dropped (room talk). The wake phrase must open the utterance.
+- `clean_transcript`: drops Whisper's silence hallucinations ("Thank you.", "[BLANK_AUDIO]") and
+  fixes house words (Wetworks, The Architect, The Forge, NovaPACS).
+- Whisper's hint includes current lead names and `WETWORKS_VOICE_VOCAB`.
+- Replies are voiced in two parts (`/api/voice/plan`): the first sentence plays while the rest is
+  fetched, so she starts talking sooner.
+
 ## Next milestones
 
 1. Claude powering the agents and the Code cell (Friday).

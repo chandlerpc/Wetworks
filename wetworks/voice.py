@@ -18,6 +18,45 @@ VOCAB_HINT = ("Clair, C.L.a.i.R, The Architect, Wetworks, Splinter, Sleeper, Int
               "Black Desert, Orlando, Sanford, Lake Mary.")
 KEEP_RECORDINGS = 5
 
+# What Whisper "hears" in silence, room noise or a TV: never a real request on their own.
+GHOSTS = {"thank you", "thanks", "thank you very much", "thanks for watching", "thank you for watching",
+          "thanks for watching and see you next time", "please subscribe", "subscribe", "you", "bye", "bye bye",
+          "okay", "ok", "so", "um", "uh", "hmm", "the end", "music", "applause", "silence", "blank audio",
+          "subtitles by the amara org community", "i'm sorry", "oh"}
+
+# Words Whisper reliably splits or misspells in this house.
+FIXUPS = [(r"\bwet ?works\b", "Wetworks"), (r"\bthe architects?\b", "The Architect"),
+          (r"\bc\.? ?l\.? ?a\.? ?i\.? ?r\b", "Clair"), (r"\bsplinter cells?\b", "Splinter cell"),
+          (r"\bthe forage\b", "The Forge"), (r"\bnova ?pacs\b", "NovaPACS"), (r"\bnova ?rad\b", "Novarad")]
+
+
+def clean_transcript(text: str) -> str:
+    """Drop Whisper's silence hallucinations and fix known misspellings."""
+    t = re.sub(r"[\[\(][^\]\)]*[\]\)]", " ", text or "")  # [BLANK_AUDIO], (music)
+    t = re.sub(r"\s+", " ", t).strip()
+    bare = re.sub(r"[^a-z' ]+", " ", t.lower()).strip()
+    bare = re.sub(r"\s+", " ", bare)
+    if not bare or bare in GHOSTS:
+        return ""
+    for pat, rep in FIXUPS:
+        t = re.sub(pat, rep, t, flags=re.I)
+    return t
+
+
+def speech_chunks(text: str, first: int = 140) -> list[str]:
+    """Split a cleaned reply so the first sentence can play while the rest is being voiced."""
+    sentences = re.split(r"(?<=[.!?])\s+", text.strip())
+    if len(sentences) < 2 or len(text) <= first:
+        return [text] if text else []
+    head, rest = "", []
+    for i, sentence in enumerate(sentences):
+        if not head or len(head) + len(sentence) < first:
+            head = f"{head} {sentence}".strip()
+        else:
+            rest = sentences[i:]
+            break
+    return [head] + ([" ".join(rest)] if rest else [])
+
 TTS_MODEL_KEY = "azure:tts"  # ledger row name; characters are stored in input_tokens
 MAX_SPOKEN_CHARS = 700
 
@@ -52,34 +91,65 @@ class VoiceError(RuntimeError):
 
 
 class Voice:
-    def __init__(self, settings, ledger):
+    def __init__(self, settings, ledger, vocab_fn=None):
         self.s = settings
         self.ledger = ledger
+        self.vocab_fn = vocab_fn  # () -> extra names Whisper should expect (lead businesses, etc.)
+        self.last_ms = 0
+
+    def hint(self) -> str:
+        extra = []
+        try:
+            extra = [n for n in (self.vocab_fn() if self.vocab_fn else []) if n]
+        except Exception:
+            pass
+        words = [w.strip() for w in self.s.voice_vocab.split(",") if w.strip()] + extra
+        out = VOCAB_HINT
+        for w in dict.fromkeys(words):  # keep order, drop repeats; Whisper reads ~224 tokens of hint
+            if len(out) + len(w) + 2 > 600:
+                break
+            out = out.rstrip(".") + f", {w}."
+        return out
 
     # ---- hearing -----------------------------------------------------------
     @property
     def can_hear(self) -> bool:
         return bool(self.s.whisper_url)
 
-    def transcribe(self, audio: bytes, content_type: str = "audio/webm") -> str:
+    def transcribe(self, audio: bytes, content_type: str = "audio/webm", quick: bool = False) -> str:
+        """quick=True uses the small fast model (wake-phrase checks); falls back to the main one."""
         if self.s.dry_run:
             return ""
         ext = {"audio/mp4": "m4a", "audio/aac": "aac", "audio/ogg": "ogg", "audio/wav": "wav",
                "audio/mpeg": "mp3"}.get(content_type.split(";")[0].strip(), "webm")
-        self._keep(audio, ext)
-        try:
-            r = httpx.post(
-                f"{self.s.whisper_url.rstrip('/')}/asr",
-                params={"task": "transcribe", "language": "en", "output": "json", "encode": "true",
-                        "vad_filter": "true", "initial_prompt": VOCAB_HINT},
-                files={"audio_file": (f"speech.{ext}", audio, content_type)},
-                timeout=60,
-            )
-            r.raise_for_status()
-        except httpx.HTTPError as e:
-            raise VoiceError(f"Whisper isn't answering ({type(e).__name__})") from e
-        data = r.json()
-        return str(data.get("text", "")).strip()
+        if not quick:
+            self._keep(audio, ext)
+        urls = ([self.s.whisper_fast_url] if quick and self.s.whisper_fast_url else []) + [self.s.whisper_url]
+        import time
+
+        t0 = time.monotonic()
+        last = None
+        for url in urls:
+            try:
+                r = httpx.post(
+                    f"{url.rstrip('/')}/asr",
+                    params={"task": "transcribe", "language": "en", "output": "json", "encode": "true",
+                            "vad_filter": "true", "initial_prompt": self.hint()},
+                    files={"audio_file": (f"speech.{ext}", audio, content_type)},
+                    timeout=20 if quick else 60,
+                )
+                r.raise_for_status()
+                break
+            except httpx.HTTPError as e:
+                last = e
+        else:
+            raise VoiceError(f"Whisper isn't answering ({type(last).__name__})") from last
+        self.last_ms = int((time.monotonic() - t0) * 1000)
+        raw = str(r.json().get("text", "")).strip()
+        text = clean_transcript(raw)
+        log.info("Whisper%s %d ms: %r%s", " (quick)" if quick else "", self.last_ms, text,
+                 "" if text == raw else f" (raw {raw!r})")
+        return text
 
     def _keep(self, audio: bytes, ext: str) -> None:
         """Keep the last few recordings in /data/voice so they can be played back when debugging."""

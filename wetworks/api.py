@@ -142,12 +142,21 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
             return JSONResponse({"error": "That recording is too long."}, status_code=413)
         try:
             ctype = request.headers.get("content-type", "audio/webm")
-            text = await run_in_threadpool(voice.transcribe, audio, ctype)
+            quick = request.query_params.get("quick") == "1"
+            text = await run_in_threadpool(voice.transcribe, audio, ctype, quick)
         except Exception as e:
             events.add("clair", "warn", f"Couldn't transcribe: {e}")
             return JSONResponse({"error": "Couldn't make out the recording. Whisper may still be starting."}, status_code=502)
-        events.add("clair", "info", f'Heard ({len(audio) // 1024} KB {ctype.split(";")[0]}): "{text[:120]}"')
-        return JSONResponse({"text": text})
+        if not quick and text:  # wake checks hear the whole room; only log what was meant for her
+            events.add("clair", "info", f'Heard in {voice.last_ms / 1000:.1f}s: "{text[:120]}"')
+        return JSONResponse({"text": text, "ms": voice.last_ms})
+
+    async def voice_plan(request: Request):
+        """Split a reply into chunks to voice one after another (the first plays sooner)."""
+        from .voice import clean_for_speech, speech_chunks
+
+        body = await request.json()
+        return JSONResponse({"chunks": speech_chunks(clean_for_speech(str(body.get("text", ""))))})
 
     async def voice_say(request: Request):
         if voice is None:
@@ -399,6 +408,7 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
         Route("/api/voice", voice_config, methods=["GET"]),
         Route("/api/voice/transcribe", voice_transcribe, methods=["POST"]),
         Route("/api/voice/say", voice_say, methods=["POST"]),
+        Route("/api/voice/plan", voice_plan, methods=["POST"]),
         Route("/api/floor", floor, methods=["GET"]),
         Route("/api/halt", set_halt, methods=["POST"]),
         Route("/api/forge", forge_status, methods=["GET"]),
