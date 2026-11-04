@@ -110,6 +110,7 @@ class Comms:
         self.events = events
         self.context_fn = context_fn
         self.memory = memory
+        self.architect_agent = None  # set to Commander.chat to make the Architect channel agentic
 
     def _insert(self, channel: str, sender: str, text: str) -> int:
         with self.lock:
@@ -171,7 +172,10 @@ class Comms:
                         if self.clair_mode != "fallback":
                             self.events.add("clair", "warn", f"Cloudflare unreachable, answering locally: {e}")
                         self.clair_mode = "fallback"
-                if bridged is not None:
+                if channel == "architect" and self.architect_agent is not None:
+                    # The Architect answers as an agent: he can look things up and act with his tools.
+                    text, mission = self.architect_agent(history), None
+                elif bridged is not None:
                     text, mission = bridged
                 else:
                     if self.llm.s.provider == "local":

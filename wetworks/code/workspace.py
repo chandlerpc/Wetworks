@@ -157,3 +157,18 @@ class Workspace:
         if r.status_code >= 300:
             raise WorkspaceError(f"GitHub wouldn't open the pull request ({r.status_code}): {r.text[:300]}")
         return r.json()["html_url"]
+
+    def merge_pr(self, number: int) -> str:
+        """Squash-merge a pull request. Only ever called after Patrick approves it."""
+        if not self.token:
+            raise WorkspaceError("No GitHub token")
+        r = httpx.put(
+            f"{self.api_base}/repos/{self.repo}/pulls/{int(number)}/merge",
+            headers={"Authorization": f"Bearer {self.token}", "Accept": "application/vnd.github+json",
+                     "X-GitHub-Api-Version": "2022-11-28"},
+            json={"merge_method": "squash"},
+            timeout=30,
+        )
+        if r.status_code >= 300:
+            raise WorkspaceError(f"GitHub wouldn't merge #{number} ({r.status_code}): {r.text[:300]}")
+        return f"Merged pull request #{number}"

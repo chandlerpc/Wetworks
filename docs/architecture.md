@@ -180,9 +180,28 @@ Other vendors (Gemini, Grok, OpenAI) plug in behind the same `LLM` interface lat
   year, with a heads-up in the brief the week before.
 - Console: Memory section in Ops to search, teach and forget.
 
+## Milestone 10: Agentic core
+
+Wetworks moves from fixed pipelines to agents that choose their own steps.
+- `wetworks/agent/runtime.py`: goal + toolbox + step loop. Each step the model returns JSON to call a
+  tool or finish; tool results come back as observations. Step limits, bad-step recovery, tool
+  failures become observations. Same protocol on the local model and Claude (`WETWORKS_AGENT_BRAIN`).
+- `wetworks/agent/toolkit.py`: web search, read page, recall/remember, missions (list, read, start
+  research or code), findings, leads (list, note, dismiss, draft outreach), follow-ups, tell Patrick.
+- Autonomy policy (Patrick's choice): agents act freely inside Wetworks; anything that leaves it or
+  can't be undone is gated (`gate="approve"`) and waits in `agents.db` until approved in the
+  console's **Needs you** panel. First gated tool: merging a pull request.
+- `wetworks/agent/commander.py`: The Architect commands. Check-ins every 2 hours, 08:00–22:00, and
+  two minutes after any mission finishes. He reviews findings, leads, missions, follow-ups and memory
+  against the priorities, opens at most 2 missions per cycle (3 open at once, 6 per day), leaves
+  follow-ups, and reports to Activity; Discord only for what needs action today.
+- The Architect's chat channel now runs as an agent with the same tools.
+- Reality check: the free 12B model handles short loops; long autonomous chains need Claude (Friday).
+
 ## Next milestones
 
-1. Claude Code brain on the Max plan (Friday).
+1. Claude powering the agents and the Code cell (Friday).
+2. Convert Intel and Revenue from fixed steps to agents with goals.
 2. One-time import of Mac notes and documents into memory.
 2. Revenue follow-ups: reminders for contacted leads, and a Splinter that researches a lead
    in depth before you reach out (Sleeper), fed by Intel's money findings.

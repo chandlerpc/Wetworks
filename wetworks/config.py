@@ -73,6 +73,14 @@ class Settings(BaseSettings):
     code_repair_rounds: int = 1
     sandbox_url: str = "http://sandbox:8800"
 
+    # Agents. agent_brain: local (free) | claude-api (paid, budget-capped). Commander cycles run every
+    # commander_every_hours during commander_hours (local time), and after missions finish.
+    agent_brain: str = "local"
+    agent_max_steps: int = 8
+    commander_hours: str = "8-22"
+    commander_every_hours: int = 2
+    agent_daily_missions: int = 6
+
     # Command API / ops console. The console refuses to start without a token.
     console_token: str = ""
     console_port: int = 8700

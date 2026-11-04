@@ -55,7 +55,8 @@ def _iso(dt) -> str | None:
 
 
 def create_app(*, settings, architect, cells: dict, comms, events, scheduler=None,
-               missions=None, open_mission=None, voice=None, leads=None, memory=None) -> Starlette:
+               missions=None, open_mission=None, voice=None, leads=None, memory=None, approvals=None,
+               commander=None) -> Starlette:
     def run_bg(fn):
         threading.Thread(target=fn, daemon=True).start()
 
@@ -164,6 +165,10 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
             if "intel" in events.busy:
                 return JSONResponse({"error": "Intel is already running."}, status_code=409)
             run_bg(cells["intel"].safe_run)
+        elif name == "cycle" and commander is not None:
+            if "architect" in events.busy:
+                return JSONResponse({"error": "The Architect is busy. Try again in a moment."}, status_code=409)
+            run_bg(lambda: commander.cycle("manual"))
         elif name == "revenue" and "revenue" in cells:
             if "revenue" in events.busy:
                 return JSONResponse({"error": "Revenue is already hunting."}, status_code=409)
@@ -254,6 +259,28 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
             return JSONResponse({"error": "Nothing to forget with that number."}, status_code=404)
         return JSONResponse({"ok": True})
 
+    async def list_approvals(request: Request):
+        if approvals is None:
+            return JSONResponse({"pending": [], "recent": []})
+        return JSONResponse({"pending": approvals.pending(), "recent": approvals.recent(10)})
+
+    async def decide_approval(request: Request):
+        if approvals is None:
+            return JSONResponse({"error": "Approvals aren't available."}, status_code=503)
+        body = await request.json()
+        decision = body.get("decision")
+        if decision not in ("approve", "decline"):
+            return JSONResponse({"error": "Choose approve or decline."}, status_code=400)
+        try:
+            a = await run_in_threadpool(approvals.decide, int(request.path_params["aid"]), decision == "approve")
+        except KeyError:
+            return JSONResponse({"error": "No request with that number."}, status_code=404)
+        except ValueError as e:
+            return JSONResponse({"error": str(e)}, status_code=409)
+        events.add("architect", "info" if a["status"] != "failed" else "error",
+                   f"Approval #{a['id']} {a['status']}: {a['summary']}" + (f" ({a['result'][:120]})" if a["result"] else ""))
+        return JSONResponse(a)
+
     async def index(request: Request):
         v = _asset_version()
         html = (CONSOLE_DIR / "index.html").read_text()
@@ -272,6 +299,8 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
         Route("/api/voice", voice_config, methods=["GET"]),
         Route("/api/voice/transcribe", voice_transcribe, methods=["POST"]),
         Route("/api/voice/say", voice_say, methods=["POST"]),
+        Route("/api/approvals", list_approvals, methods=["GET"]),
+        Route("/api/approvals/{aid:int}", decide_approval, methods=["POST"]),
         Route("/api/memory", list_memory, methods=["GET"]),
         Route("/api/memory", add_memory, methods=["POST"]),
         Route("/api/memory/{mid:int}", forget_memory, methods=["DELETE"]),

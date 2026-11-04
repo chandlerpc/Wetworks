@@ -38,6 +38,11 @@
     <section id="pane-ops" class="pane" aria-labelledby="ops-h">
       <h2 id="ops-h">Ops</h2>
 
+      <div id="needs-you" class="needs-you" hidden>
+        <h3>Needs you</h3>
+        <ul id="approvals" class="approvals"></ul>
+      </div>
+
       <div class="readouts">
         <div class="readout">
           <span class="ro-label">Spend this month</span>
@@ -62,7 +67,8 @@
       <div class="block actions">
         <h3>Send out</h3>
         <div class="btnrow">
-          <button type="button" data-action="intel">Run Intel sweep</button>
+          <button type="button" data-action="cycle">Ask The Architect to check in</button>
+          <button type="button" class="ghost" data-action="intel">Run Intel sweep</button>
           <button type="button" class="ghost" data-action="brief-morning">Send morning brief</button>
           <button type="button" class="ghost" data-action="brief-evening">Send evening brief</button>
         </div>

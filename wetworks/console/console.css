@@ -277,6 +277,16 @@ input:focus, textarea:focus { border-color: var(--phosphor-dim); outline: none; 
 .steps-wrap summary { cursor: pointer; font-size: 14px; }
 .steps { margin: var(--s2) 0 0; padding-left: 1.4em; font-size: 12.5px; line-height: 1.6; }
 
+/* ---- Needs you (approvals) ------------------------------------------- */
+.needs-you { margin-bottom: var(--s5); padding: var(--s3) var(--s4); border: 1px solid var(--amber); border-left-width: 4px;
+  border-radius: 8px; background: rgba(232, 163, 61, 0.06); }
+.needs-you h3 { color: var(--amber); font-size: 15px; margin: 0 0 var(--s2); }
+.approvals { list-style: none; margin: 0; padding: 0; }
+.approvals li { padding: var(--s2) 0; border-top: 1px solid rgba(232, 163, 61, 0.25); }
+.approvals li:first-child { border-top: 0; }
+.approvals .what { font-weight: 600; font-size: 16px; margin: 0; }
+.approvals .why { color: #B4BEB2; font-size: 14px; margin: 2px 0 var(--s2); }
+
 /* ---- Memory ---------------------------------------------------------- */
 .memory-block .note { margin: 0 0 var(--s2); }
 .mem-row { display: flex; gap: var(--s2); margin: var(--s2) 0; }

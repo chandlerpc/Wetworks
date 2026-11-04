@@ -75,7 +75,7 @@ class LLM:
             if json_mode:  # one shape every JSON caller understands: no findings, no mission
                 import json as _json
 
-                stub = _json.dumps({"reply": stub, "findings": [], "mission": None})
+                stub = _json.dumps({"reply": stub, "done": stub, "findings": [], "mission": None})
             return Reply(text=stub, model=model, cost_usd=0.0)
         text, tin, tout = self.ollama.chat(prompt, system=system, json_mode=json_mode, max_tokens=max_tokens)
         self.ledger.record_cost(agent, model, tin, tout, 0.0)

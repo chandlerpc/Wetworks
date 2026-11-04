@@ -24,6 +24,7 @@
   const JOBS = {
     morning_brief: "Morning brief",
     evening_brief: "Evening brief",
+    commander_cycle: "Architect check-in",
   };
 
   // ---- API ------------------------------------------------------------
@@ -87,7 +88,8 @@
     sched.replaceChildren();
     s.schedule.slice(0, 4).forEach((j) => {
       const li = el("li");
-      const label = JOBS[j.id] || (j.id.startsWith("intel_") ? "Intel sweep" : j.id);
+      const prefix = { intel_: "Intel sweep", revenue_: "Revenue hunt", learner_: "Nightly learning" };
+      const label = JOBS[j.id] || Object.entries(prefix).find(([k]) => j.id.startsWith(k))?.[1] || j.id;
       li.append(el("span", null, label), el("span", null, j.next_run ? when(j.next_run) : "paused"));
       sched.append(li);
     });
@@ -348,6 +350,38 @@
     } finally { btn.disabled = false; }
   }
 
+  // ---- Approvals ------------------------------------------------------
+  async function loadApprovals() {
+    const { pending } = await api("/api/approvals");
+    const box = $("#needs-you");
+    box.hidden = !pending.length;
+    const list = $("#approvals");
+    list.replaceChildren();
+    pending.forEach((a) => {
+      const li = el("li");
+      li.append(el("p", "what", `#${a.id} ${a.summary}`));
+      li.append(el("p", "why", `${NAMES[a.agent] || a.agent} asks${a.reason ? `: ${a.reason}` : "."}`));
+      const row = el("div", "btnrow");
+      const yes = el("button", "small", "Approve"); yes.type = "button";
+      const no = el("button", "ghost small", "Decline"); no.type = "button";
+      const decide = async (decision) => {
+        yes.disabled = no.disabled = true;
+        try {
+          const r = await api(`/api/approvals/${a.id}`, { method: "POST", body: JSON.stringify({ decision }) });
+          if (r.status === "failed") alert(`That didn't work: ${r.result}`);
+        } catch (err) { if (err.message !== "unauthorized") alert(err.message); }
+        safe(loadApprovals)(); safe(loadEvents)();
+      };
+      yes.addEventListener("click", () => decide("approve"));
+      no.addEventListener("click", () => decide("decline"));
+      row.append(yes, no);
+      li.append(row);
+      list.append(li);
+    });
+    const tab = $(".tabs button[data-pane=ops]");
+    if (tab) tab.textContent = pending.length ? `Ops (${pending.length})` : "Ops";
+  }
+
   // ---- Memory ---------------------------------------------------------
   const SRC = { profile: "Profile", console: "You, here", nightly: "Learned overnight", "chat:clair": "From C.L.a.i.R chat", "chat:architect": "From The Architect chat" };
   async function loadMemory() {
@@ -485,6 +519,7 @@
       note.textContent = {
         intel: "Intel sweep started. Findings show up in Intel when it's done.",
         revenue: "Revenue is hunting. New leads show up in Leads when it's done.",
+        cycle: "The Architect is reviewing everything. His report appears in Activity.",
       }[btn.dataset.action] || "Brief is being compiled and will land in Discord shortly.";
       if (btn.closest("#pane-leads")) $("#lead-counts").textContent = "Hunting… new leads appear here in a few minutes.";
       setTimeout(loadEvents, 800);
@@ -513,6 +548,7 @@
     selectChannel(channel);
     const s = safe(loadStatus), ev = safe(loadEvents), m = safe(loadMessages), f = safe(loadFindings), mi = safe(loadMissions), le = safe(loadLeads);
     s(); ev(); f(); mi(); le(); safe(loadMemory)();
+    const ap = safe(loadApprovals); ap(); timers.push(setInterval(ap, 10000));
     timers.push(setInterval(le, 30000));
     if (window.WWVoice) window.WWVoice.init();
     timers.push(setInterval(s, 8000), setInterval(ev, 4000), setInterval(m, 2500), setInterval(f, 30000), setInterval(mi, 5000));
