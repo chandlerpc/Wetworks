@@ -8,7 +8,7 @@ from .runtime import Tool, Toolbox
 
 def build_toolbox(*, llm, memory, missions, open_mission, findings, leads, revenue, notify,
                   followups, workspace=None, agent_name="architect", daily_mission_cap=6, commander=None,
-                  chats=None) -> Toolbox:
+                  chats=None, forge=None) -> Toolbox:
     t = Toolbox()
 
     # ---- looking things up ---------------------------------------------------
@@ -122,6 +122,39 @@ def build_toolbox(*, llm, memory, missions, open_mission, findings, leads, reven
 
         t.add(Tool("tell_architect", "Hand something to The Architect: strategy, priorities, or work that needs "
                    "several missions coordinated.", {"note": "what he should know or do"}, tell_architect))
+
+    # ---- The Forge -----------------------------------------------------------------
+    if forge is not None:
+        def forge_status():
+            return {"forge": forge.health(), "datasets": forge.datasets(), "jobs": forge.jobs(5),
+                    "local_models": forge.models(), "benchmarks": forge.evals(5),
+                    "agent_decisions_recorded": forge.traces.counts(), "agents_use": forge.llm.ollama.model}
+
+        def queue_training(name, dataset="agent-steps"):
+            try:
+                j = forge.queue(str(name), str(dataset))
+            except Exception as e:
+                return f"Not queued: {e}"
+            return f"Queued training job {j['id']} for tonight's window ({forge.s.forge_window} local)."
+
+        def benchmark(model, dataset="agent-steps"):
+            try:
+                return forge.evaluate(str(model), str(dataset))
+            except Exception as e:
+                return f"Benchmark didn't run: {e}"
+
+        t.add(Tool("forge_status", "The Forge: training jobs, datasets, local models, benchmarks, recorded decisions.",
+                   {}, forge_status))
+        t.add(Tool("build_training_data", "Rebuild the agent-steps dataset from decisions recorded from Gemini/Claude.",
+                   {}, lambda: forge.build_agent_dataset()))
+        t.add(Tool("queue_training", "Queue a fine-tuning job on the GPU for tonight's training window.",
+                   {"name": "short name for the new model", "dataset": "(optional) dataset name, default agent-steps"},
+                   queue_training))
+        t.add(Tool("benchmark_model", "Score a local model on held-out agent decisions (how reliably it drives agents).",
+                   {"model": "Ollama model name", "dataset": "(optional) default agent-steps"}, benchmark))
+        t.add(Tool("switch_local_model", "Make every agent think with a different local model.",
+                   {"model": "Ollama model name"}, lambda model: forge.use_model(str(model)), gate="approve",
+                   summarize=lambda a: f"Switch all agents' local model to {a.get('model')}"))
 
     # ---- gated: leaves Wetworks or can't be undone ------------------------------
     if workspace is not None:

@@ -12,6 +12,10 @@ from .local import Ollama, SearXNG, fetch_text
 log = logging.getLogger("wetworks.llm")
 
 
+class LocalModelPaused(RuntimeError):
+    """The Forge has the GPU for training; the local model is unloaded until it finishes."""
+
+
 class BudgetExceeded(RuntimeError):
     pass
 
@@ -29,6 +33,9 @@ class LLM:
         self.s = settings
         self.ledger = ledger
         self._anthropic = None
+        import threading
+
+        self.paused = threading.Event()  # set by The Forge while it trains on the GPU
         self.ollama = Ollama(settings.ollama_url, settings.local_model, settings.local_num_ctx)
         self.searx = SearXNG(settings.searxng_url)
 
@@ -69,7 +76,9 @@ class LLM:
     def ask_local(self, agent: str, prompt: str, *, system: str = "", json_mode: bool = False,
                   max_tokens: int = 1024) -> Reply:
         """Ask the local Ollama model. Free; logged at $0 so usage still shows in the ledger."""
-        model = f"local:{self.s.local_model}"
+        if self.paused.is_set():
+            raise LocalModelPaused("The Forge is training on the GPU; the local model is back when it finishes")
+        model = f"local:{self.ollama.model}"
         if self.s.dry_run:
             stub = f"[dry-run {model}] {prompt[:200]}"
             if json_mode:  # one shape every JSON caller understands: no findings, no mission

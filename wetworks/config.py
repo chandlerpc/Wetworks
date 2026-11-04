@@ -82,6 +82,11 @@ class Settings(BaseSettings):
     agent_daily_missions: int = 6
     cells_agentic: bool = True      # Intel, Revenue and Splinter research run as agents
 
+    # The Forge (training). Jobs run in forge_window (local hours, start-end) unless started "now".
+    forge_url: str = "http://forge:8900"
+    forge_base_model: str = "unsloth/Qwen3-4B-Instruct-2507"
+    forge_window: str = "1-5"
+
     # Command API / ops console. The console refuses to start without a token.
     console_token: str = ""
     console_port: int = 8700

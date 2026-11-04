@@ -75,6 +75,24 @@ best fits. It never sends anything: review, copy and track leads in the console'
 docker compose exec architect python -m wetworks.main run revenue
 ```
 
+## The Forge (training)
+
+```
+docker compose exec architect python -m wetworks.main forge-status
+```
+
+```
+docker compose exec architect python -m wetworks.main forge-dataset
+```
+
+```
+docker compose exec architect python -m wetworks.main forge-train agent --now
+```
+
+```
+docker compose exec architect python -m wetworks.main forge-eval gemma4:12b
+```
+
 ## Intel topics
 
 Edit `config/intel.toml` to add, change or pause topics. It's re-read on every run, so no rebuild is needed.

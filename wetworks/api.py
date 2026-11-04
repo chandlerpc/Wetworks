@@ -56,7 +56,7 @@ def _iso(dt) -> str | None:
 
 def create_app(*, settings, architect, cells: dict, comms, events, scheduler=None,
                missions=None, open_mission=None, voice=None, leads=None, memory=None, approvals=None,
-               commander=None) -> Starlette:
+               commander=None, forge=None) -> Starlette:
     def run_bg(fn):
         threading.Thread(target=fn, daemon=True).start()
 
@@ -281,6 +281,41 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
                    f"Approval #{a['id']} {a['status']}: {a['summary']}" + (f" ({a['result'][:120]})" if a["result"] else ""))
         return JSONResponse(a)
 
+    async def forge_status(request: Request):
+        if forge is None:
+            return JSONResponse({"error": "The Forge isn't set up."}, status_code=503)
+        def gather():
+            return {"forge": forge.health(), "datasets": forge.datasets(), "jobs": forge.jobs(10), "models": forge.models(),
+                    "evals": forge.evals(10), "decisions": forge.traces.counts(), "agents_use": forge.llm.ollama.model,
+                    "window": settings.forge_window, "base_model": settings.forge_base_model,
+                    "training": forge.llm.paused.is_set()}
+        return JSONResponse(await run_in_threadpool(gather))
+
+    async def forge_action(request: Request):
+        if forge is None:
+            return JSONResponse({"error": "The Forge isn't set up."}, status_code=503)
+        name = request.path_params["name"]
+        body = await request.json() if request.headers.get("content-length") not in (None, "0") else {}
+        try:
+            if name == "dataset":
+                return JSONResponse(await run_in_threadpool(forge.build_agent_dataset))
+            if name == "train":
+                return JSONResponse(forge.queue(str(body.get("name") or "agent"), str(body.get("dataset") or "agent-steps"),
+                                                run_now=bool(body.get("now"))), status_code=202)
+            if name == "eval":
+                if "forge" in events.busy:
+                    return JSONResponse({"error": "The Forge is busy."}, status_code=409)
+                run_bg(lambda: forge.evaluate(str(body.get("model")), str(body.get("dataset") or "agent-steps")))
+                return JSONResponse({"ok": True}, status_code=202)
+            if name == "use":
+                return JSONResponse({"message": await run_in_threadpool(forge.use_model, str(body.get("model")))})
+            if name == "cancel":
+                ok = forge.cancel(str(body.get("id")))
+                return JSONResponse({"ok": ok}, status_code=200 if ok else 409)
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        return JSONResponse({"error": "Unknown Forge action."}, status_code=404)
+
     async def index(request: Request):
         v = _asset_version()
         html = (CONSOLE_DIR / "index.html").read_text()
@@ -299,6 +334,8 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
         Route("/api/voice", voice_config, methods=["GET"]),
         Route("/api/voice/transcribe", voice_transcribe, methods=["POST"]),
         Route("/api/voice/say", voice_say, methods=["POST"]),
+        Route("/api/forge", forge_status, methods=["GET"]),
+        Route("/api/forge/{name}", forge_action, methods=["POST"]),
         Route("/api/approvals", list_approvals, methods=["GET"]),
         Route("/api/approvals/{aid:int}", decide_approval, methods=["POST"]),
         Route("/api/memory", list_memory, methods=["GET"]),

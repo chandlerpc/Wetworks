@@ -11,6 +11,7 @@ services:
     volumes:
       - wetworks-data:/data
       - sandbox-runs:/data/sandbox-runs
+      - forge-data:/data/forge
       - ./config:/app/config:ro
     networks:
       - default
@@ -80,6 +81,32 @@ services:
     pids_limit: 256
     logging: *logging
 
+  # The Forge: fine-tuning on the GPU (Unsloth). Shares the GPU with Ollama; Wetworks unloads the
+  # agents' model before a job and reloads it after. Needs internet to download base models.
+  forge:
+    build:
+      context: .
+      dockerfile: forge/Dockerfile
+    container_name: wetworks-forge
+    restart: unless-stopped
+    ipc: host
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    volumes:
+      - forge-data:/forge
+      - forge-hf-cache:/workspace/.cache/huggingface
+    environment:
+      HF_HOME: /workspace/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    logging: *logging
+
   # Free self-hosted web search
   searxng:
     image: searxng/searxng:latest
@@ -101,3 +128,5 @@ volumes:
   sandbox-runs:
   ollama-models:
   whisper-models:
+  forge-data:
+  forge-hf-cache:

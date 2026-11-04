@@ -220,9 +220,30 @@ Every part of Wetworks now decides its own steps with tools:
   per call. Gemini's free tier limits how many steps she can take per day; when it's hit she thinks on
   the local model and the console says so.
 
+## Milestone 12: Knowledge and The Forge
+
+**Knowledge.** `config/knowledge/*.md` is loaded into memory on start (seeded from Claude's memory of
+Patrick's past chats). `import-chats` loads a Claude data export (`conversations.json` or the export
+zip, kept in the git-ignored `config/imports/`) into a searchable archive; The Architect and C.L.a.i.R
+have `search_past_chats` and `read_past_chat`.
+
+**The Forge** (`forge/` container + `wetworks/forge.py`):
+- Unsloth QLoRA fine-tuning on the RTX 4070 (8GB). Default base `unsloth/Qwen3-4B-Instruct-2507`.
+- Job runner on port 8900 inside the GPU container; one job at a time; progress in `status.json`.
+- GPU handoff: before training, Wetworks unloads every Ollama model and pauses local thinking
+  (`LocalModelPaused`; C.L.a.i.R keeps going on Gemini, Architect cycles skip). Afterwards it reloads.
+- Jobs run in the 01:00–05:00 window unless started "now".
+- Output: GGUF (q4_k_m) registered in Ollama as `wetworks-<name>:<id>` via the blobs + create API.
+- Data: every agent decision is recorded (`traces.db`) with the brain that made it. The `agent-steps`
+  dataset uses only valid decisions from teacher brains (Gemini now, Claude from Friday), so the local
+  model learns to drive Wetworks' agents. 10% is held out.
+- Benchmarks: any local model is scored on held-out decisions (valid step, same action, same tool).
+- Switching the agents' local model is approval-gated for The Architect; Patrick can switch any time.
+
 ## Next milestones
 
-1. Claude powering the agents and the Code cell (Friday).
+1. The ops-center UI.
+2. Claude powering the agents and the Code cell (Friday).
 2. One-time import of Mac notes and documents into memory.
 2. Revenue follow-ups: reminders for contacted leads, and a Splinter that researches a lead
    in depth before you reach out (Sleeper), fed by Intel's money findings.

@@ -43,7 +43,8 @@ Keep it to a few sentences unless he asks for more. Your done text is the reply 
 
 class Commander:
     def __init__(self, *, toolbox, ask, approvals, followups, events, context_fn, memory, max_steps=8,
-                 min_gap_minutes=15):
+                 min_gap_minutes=15, paused=None):
+        self.paused = paused  # threading.Event set while The Forge trains
         self.toolbox = toolbox
         self.ask = ask
         self.approvals = approvals
@@ -82,6 +83,8 @@ class Commander:
         try:
             if time.monotonic() - self.last_cycle < self.min_gap and reason != "manual":
                 return "Skipped: a cycle ran recently."
+            if self.paused is not None and self.paused.is_set():
+                return "Skipped: The Forge is training on the GPU."
             self.last_cycle = time.monotonic()
             due = [f["id"] for f in self.followups.due()]
             self.events.busy.add("architect")

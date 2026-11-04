@@ -25,6 +25,8 @@ from .agent.clair import ClairAgent
 from .agent.commander import Commander
 from .agent.state import Approvals, Followups
 from .agent.toolkit import build_toolbox
+from .agent.traces import Traces, recorded
+from .forge import Forge
 from .knowledge import ChatArchive, sync_knowledge
 from .memory import Memory
 from .cells.revenue import Revenue
@@ -55,8 +57,16 @@ def build(settings):
     chats = ChatArchive(settings.data_dir / "chats.db")
     log.info("Memory: %d profile lines, %d knowledge lines, %d memories total, %d archived chats",
              loaded, known, memory.count(), chats.count())
+    # Every agent decision is recorded for The Forge; brain says who made it (teachers: gemini, claude).
+    traces = Traces(settings.data_dir / "traces.db")
+    default_brain = lambda: "claude" if settings.agent_brain == "claude-api" else "local"
+    forge = Forge(settings=settings, llm=architect.llm, traces=traces, events=architect.events,
+                  data_dir=settings.data_dir / "forge", runner_url=settings.forge_url, ollama_url=settings.ollama_url)
+    active = settings.data_dir / "forge" / "active_model.txt"
+    if active.exists() and active.read_text().strip():
+        architect.llm.ollama.model = active.read_text().strip()  # a model promoted from The Forge
     ctx = CellContext(settings=settings, llm=architect.llm, findings=architect.findings, events=architect.events,
-                      memory=memory, ask=make_ask(settings, architect.llm, "cells"))
+                      memory=memory, ask=recorded(make_ask(settings, architect.llm, "cells"), traces, "cells", default_brain))
     intel = Intel(ctx)
     leads = LeadStore(settings.data_dir / "leads.db")
     revenue = Revenue(ctx, leads)
@@ -94,18 +104,18 @@ def build(settings):
     approvals = Approvals(settings.data_dir / "agents.db", on_request=notify_approval)
     followups = Followups(settings.data_dir / "agents.db")
 
-    agent_ask = make_ask(settings, architect.llm, "architect")
+    agent_ask = recorded(make_ask(settings, architect.llm, "architect"), traces, "architect", default_brain)
 
     toolbox = build_toolbox(llm=architect.llm, memory=memory, missions=missions, open_mission=open_mission,
                             findings=architect.findings, leads=leads, revenue=revenue, notify=architect.notify,
                             followups=followups, workspace=coder.ws, daily_mission_cap=settings.agent_daily_missions,
-                            chats=chats)
-    for name in ("merge_pull_request",):
+                            chats=chats, forge=forge)
+    for name in ("merge_pull_request", "switch_local_model"):
         if name in toolbox.tools:
             approvals.executors[name] = toolbox.tools[name].fn
     commander = Commander(toolbox=toolbox, ask=agent_ask, approvals=approvals, followups=followups,
                           events=architect.events, context_fn=architect.context_block, memory=memory,
-                          max_steps=settings.agent_max_steps)
+                          max_steps=settings.agent_max_steps, paused=architect.llm.paused)
     comms.architect_agent = commander.chat
 
     # C.L.a.i.R: her own toolbox (missions she opens report back to her), Gemini brain with local backup.
@@ -121,7 +131,9 @@ def build(settings):
                                 findings=architect.findings, leads=leads, revenue=revenue, notify=architect.notify,
                                 followups=followups, agent_name="clair", daily_mission_cap=settings.agent_daily_missions,
                                 commander=commander, chats=chats)
-    clair = ClairAgent(toolbox=clair_tools, ask=clair_ask(bridge, make_ask(settings, architect.llm, "clair"), clair_mode),
+    clair_brain = lambda: "gemini" if comms.clair_mode == "cloudflare" else default_brain()
+    clair = ClairAgent(toolbox=clair_tools, ask=recorded(clair_ask(bridge, make_ask(settings, architect.llm, "clair"), clair_mode),
+                                                         traces, "clair", clair_brain),
                        approvals=approvals, events=architect.events, context_fn=architect.context_block, memory=memory)
     comms.clair_agent = clair.chat
     previous_done = operator.on_done
@@ -131,7 +143,7 @@ def build(settings):
         commander.on_mission_done(m)  # The Architect reviews finished work and decides next steps
 
     operator.on_done = on_done
-    comms.commander, comms.approvals, comms.chats = commander, approvals, chats
+    comms.commander, comms.approvals, comms.chats, comms.forge = commander, approvals, chats, forge
     return architect, {"intel": intel, "revenue": revenue, "learner": learner}, comms
 
 
@@ -157,6 +169,24 @@ def run() -> None:
         n, skipped = comms.chats.import_claude_export(Path(sys.argv[2]))
         print(f"Imported {n} chats ({skipped} empty ones skipped). {comms.chats.count()} in the archive.")
         return
+    if len(sys.argv) >= 2 and sys.argv[1].startswith("forge"):
+        import json as _json
+
+        forge, cmd, rest = comms.forge, sys.argv[1], sys.argv[2:]
+        if cmd == "forge-status":
+            print(_json.dumps({"forge": forge.health(), "datasets": forge.datasets(), "jobs": forge.jobs(5),
+                               "decisions": forge.traces.counts(), "models": forge.models(), "evals": forge.evals(5)}, indent=2))
+        elif cmd == "forge-dataset":
+            print(forge.build_agent_dataset())
+        elif cmd == "forge-train" and rest:
+            j = forge.queue(rest[0], rest[1] if len(rest) > 1 and not rest[1].startswith("--") else "agent-steps",
+                            run_now="--now" in rest)
+            print(f"Queued {j['id']}" + (" (starts within 5 minutes)" if j["run_now"] else " for tonight's window"))
+        elif cmd == "forge-eval" and rest:
+            print(forge.evaluate(rest[0], rest[1] if len(rest) > 1 else "agent-steps"))
+        else:
+            print("forge-status | forge-dataset | forge-train <name> [dataset] [--now] | forge-eval <model> [dataset]")
+        return
     if len(sys.argv) >= 2 and sys.argv[1] == "cycle":
         print(comms.commander.cycle("manual"))
         return
@@ -175,6 +205,7 @@ def run() -> None:
                       lead_minutes=settings.intel_lead_minutes)
     sleepers.register(cells["revenue"], [settings.morning_brief], lead_minutes=settings.revenue_lead_minutes)
     sleepers.register(cells["learner"], [settings.learner_time])
+    sched.add_job(comms.forge.tick, "interval", minutes=5, id="forge_tick", max_instances=1, coalesce=True)
     sched.add_job(comms.commander.cycle, CronTrigger(hour=f"{settings.commander_hours}/{settings.commander_every_hours}",
                                                      minute=10, timezone=settings.timezone),
                   args=["scheduled check"], id="commander_cycle", misfire_grace_time=1800, coalesce=True, max_instances=1)
@@ -213,7 +244,7 @@ def run() -> None:
     app = create_app(settings=settings, architect=architect, cells=cells, comms=comms,
                      events=architect.events, scheduler=sched, missions=comms.missions,
                      open_mission=comms.open_mission_fn, voice=Voice(settings, architect.ledger), leads=comms.leads,
-                     memory=comms.memory, approvals=comms.approvals, commander=comms.commander)
+                     memory=comms.memory, approvals=comms.approvals, commander=comms.commander, forge=comms.forge)
     log.info("Console listening on port %d", settings.console_port)
     uvicorn.run(app, host="0.0.0.0", port=settings.console_port, log_level="warning")
     sched.shutdown(wait=False)
