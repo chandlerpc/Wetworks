@@ -3,7 +3,7 @@
 // Azure's en-IE-EmilyNeural, fetched from the MSI so the Azure key never reaches the phone.
 
 // ---- Phrase matching (pure; also unit-tested in Node) -------------------------------
-const NAME_VARIANTS = "clair|claire|clare|clear|klair|claira|clara";
+const NAME_VARIANTS = "clair|claire|clare|clear|klair|klaire|claira|clara|klara|cler|clare's|claires";
 
 function normalize(s) {
   return String(s || "")
@@ -70,7 +70,14 @@ if (typeof window !== "undefined") (() => {
   // ---- Audio out ----
   function unlock() {
     if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
-    if (ctx.state === "suspended") ctx.resume();
+    if (ctx.state !== "running") ctx.resume().catch(() => {});
+  }
+  // iPhones pause ("interrupt") the audio engine when the microphone starts; wake it back up.
+  async function wake() {
+    if (ctx && ctx.state !== "running") { try { await ctx.resume(); } catch {} }
+  }
+  function decode(buf) {  // promise + callback forms, for older Safari
+    return new Promise((ok, bad) => { const p = ctx.decodeAudioData(buf, ok, bad); if (p && p.then) p.then(ok, bad); });
   }
   function beep(up) {
     if (!ctx) return;
@@ -85,20 +92,37 @@ if (typeof window !== "undefined") (() => {
     o.connect(g).connect(ctx.destination);
     o.start(t); o.stop(t + 0.24);
   }
+  let lastNote = "";
   async function speak(text) {
-    if (!cfg || !cfg.speak || !text) return;
+    if (!text) return;
+    if (!cfg.speak) {  // maybe the Azure key was added since the page loaded
+      try { cfg = await window.WW.api("/api/voice"); } catch {}
+      if (!cfg.speak) { lastNote = "Her voice isn't set up on the MSI yet (Azure key), so replies are text only."; return; }
+    }
     say("C.L.a.i.R is speaking", "live");
+    let bytes;
     try {
       const r = await rawFetch("/api/voice/say", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
-      if (!r.ok) { const e = await r.json().catch(() => ({})); say(e.error || "Voice unavailable; reply is on screen.", "warn"); return; }
-      const buf = await ctx.decodeAudioData(await r.arrayBuffer());
+      if (!r.ok) { const e = await r.json().catch(() => ({})); lastNote = e.error || "Voice unavailable; reply is on screen."; return; }
+      bytes = await r.arrayBuffer();
+    } catch { lastNote = "Couldn't reach her voice; reply is on screen."; return; }
+    try {
+      await wake();
+      const buf = await decode(bytes.slice(0));
       await new Promise((done) => {
         const src = ctx.createBufferSource();
         src.buffer = buf; src.connect(ctx.destination);
         src.onended = done; src.start();
       });
     } catch {
-      say("Couldn't play her voice; reply is on screen.", "warn");
+      // Fallback: a plain audio element (some phones decode MP3 here but not in the audio engine)
+      try {
+        const url = URL.createObjectURL(new Blob([bytes], { type: "audio/mpeg" }));
+        const a = new Audio(url);
+        await a.play();
+        await new Promise((done) => { a.onended = done; a.onerror = done; });
+        URL.revokeObjectURL(url);
+      } catch { lastNote = "Your phone blocked her audio. Tap the mic once, then try again."; }
     }
   }
 
@@ -144,6 +168,7 @@ if (typeof window !== "undefined") (() => {
     unlock();
     try {
       const s = await openMic();
+      await wake();
       holdRec = record(s);
       $("#mic").classList.add("rec");
       say("Listening. Let go to send", "rec");
@@ -176,6 +201,7 @@ if (typeof window !== "undefined") (() => {
   }
   function settle() {
     if (busy || holdRec) return;
+    if (lastNote) { const n = lastNote; lastNote = ""; say(n, "warn"); setTimeout(() => { if (!busy) settle(); }, 6000); return; }
     if (mode === "wake") say(`Listening for "${cfg.wake_phrase}"`, "");
     else if (mode === "convo") say(`I'm listening. Say "${(cfg.stop_phrases || ["that's all"])[0]}" to stop`, "live");
     else say(cfg && cfg.hear ? "Hold the mic to talk" : "", "");
@@ -190,7 +216,7 @@ if (typeof window !== "undefined") (() => {
       if (!text) return;
       if (mode === "wake") {
         const m = matchWake(text, cfg.wake_phrase);
-        if (!m) return;
+        if (!m) { say(`Heard: "${text.slice(0, 60)}"`, ""); await new Promise((r) => setTimeout(r, 2500)); return; }
         mode = "convo"; beep(true); idleReset();
         if (m.rest.split(" ").length >= 2) await send(m.rest);
       } else if (mode === "convo") {
@@ -212,6 +238,9 @@ if (typeof window !== "undefined") (() => {
     let sum = 0; for (const v of data) sum += v * v;
     const rms = Math.sqrt(sum / data.length);
     const now = performance.now();
+    const vu = document.querySelector("#vu > span");
+    if (vu) vu.style.width = `${Math.min(100, Math.round((rms / 0.12) * 100))}%`;
+    if (ctx.state !== "running") { wake(); return; }
     if (busy || holdRec) {
       loud = 0;
       if (recorder) { const r = recorder; recorder = null; try { r.rec.stop(); } catch {} } // drop it
@@ -236,11 +265,13 @@ if (typeof window !== "undefined") (() => {
     unlock();
     try {
       const s = await openMic();
+      await wake();
       const src = ctx.createMediaStreamSource(s);
       analyser = ctx.createAnalyser(); analyser.fftSize = 1024;
       src.connect(analyser);
       mode = "wake";
       if (window.WW) window.WW.useClair();
+      document.querySelector("#vu").hidden = false;
       vadTimer = setInterval(vadTick, 50);
       settle();
     } catch {
@@ -249,6 +280,7 @@ if (typeof window !== "undefined") (() => {
   }
   function handsFreeOff() {
     mode = "off"; clearInterval(vadTimer); clearTimeout(idleTimer);
+    const vu = document.querySelector("#vu"); if (vu) vu.hidden = true;
     if (recorder) { try { recorder.rec.stop(); } catch {} recorder = null; }
     closeMic(); settle();
   }

@@ -166,6 +166,8 @@ input:focus, textarea:focus { border-color: var(--phosphor-dim); outline: none; 
 .link-note.fallback::before { background: var(--amber); }
 .voicebar { display: flex; align-items: center; gap: var(--s3); margin-top: var(--s2); min-height: 34px; }
 .voicebar .chip[aria-pressed="true"] { color: var(--night); background: var(--phosphor); border-color: var(--phosphor); }
+.vu { flex: 0 0 44px; height: 6px; background: #070A08; border: 1px solid var(--seam); border-radius: 3px; overflow: hidden; }
+.vu > span { display: block; height: 100%; width: 0; background: var(--phosphor); transition: width 60ms linear; }
 .voice-status { margin: 0; font-size: 13px; color: var(--fog); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .voice-status.live { color: var(--phosphor); }
 .voice-status.rec { color: var(--signal); }
