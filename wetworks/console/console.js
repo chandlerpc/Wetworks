@@ -108,15 +108,16 @@
     const feed = $("#feed");
     if (!events.length) { if (!feed.children.length) feed.append(el("li", "empty", "No activity yet. Run an Intel sweep to wake things up.")); return; }
     $(".empty", feed)?.remove();
-    const nearBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 40;
+    const atTop = feed.scrollTop < 40;
+    // Newest on top: events arrive oldest-first, so insert each one above the previous.
     events.forEach((e) => {
       const li = el("li", e.kind);
       li.append(el("span", "t", clock(e.ts)), el("span", "src", NAMES[e.source] || e.source), el("span", "msg", e.text));
-      feed.append(li);
+      feed.prepend(li);
       lastEvent = Math.max(lastEvent, e.id);
     });
-    while (feed.children.length > 300) feed.firstElementChild.remove();
-    if (nearBottom || events.length === feed.children.length) feed.scrollTop = feed.scrollHeight;
+    while (feed.children.length > 300) feed.lastElementChild.remove();
+    if (atTop) feed.scrollTop = 0;
   }
 
   // ---- Comms ----------------------------------------------------------
