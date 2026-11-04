@@ -7,7 +7,8 @@ from .runtime import Tool, Toolbox
 
 
 def build_toolbox(*, llm, memory, missions, open_mission, findings, leads, revenue, notify,
-                  followups, workspace=None, agent_name="architect", daily_mission_cap=6, commander=None) -> Toolbox:
+                  followups, workspace=None, agent_name="architect", daily_mission_cap=6, commander=None,
+                  chats=None) -> Toolbox:
     t = Toolbox()
 
     # ---- looking things up ---------------------------------------------------
@@ -19,6 +20,14 @@ def build_toolbox(*, llm, memory, missions, open_mission, findings, leads, reven
     t.add(Tool("recall", "Search Wetworks' memory about Patrick, his business, people and past decisions.",
                {"query": "what to look for"},
                lambda query: [m["text"] for m in memory.search(query, 10, include_pinned=True)] or "Nothing remembered about that."))
+
+    if chats is not None:
+        t.add(Tool("search_past_chats", "Search Patrick's past Claude conversations (his earlier work, projects and "
+                   "decisions). Returns titles, dates and excerpts.", {"query": "what to look for"},
+                   lambda query: chats.search(query) or "Nothing in the past chats matches that."))
+        t.add(Tool("read_past_chat", "Read one past Claude conversation found with search_past_chats.",
+                   {"id": "the chat's id from search results"},
+                   lambda id: chats.read(str(id)) or "No chat with that id."))
 
     # ---- Wetworks itself -----------------------------------------------------
     def list_missions(status=""):

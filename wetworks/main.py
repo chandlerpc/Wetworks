@@ -6,6 +6,7 @@
     python -m wetworks.main mission <text>  run one research mission now and print the result
     python -m wetworks.main code <text>     run one code mission now (opens a pull request)
     python -m wetworks.main cycle           run one Architect command cycle now and print his report
+    python -m wetworks.main import-chats <conversations.json or export .zip>   load past Claude chats
 """
 
 import logging
@@ -24,6 +25,7 @@ from .agent.clair import ClairAgent
 from .agent.commander import Commander
 from .agent.state import Approvals, Followups
 from .agent.toolkit import build_toolbox
+from .knowledge import ChatArchive, sync_knowledge
 from .memory import Memory
 from .cells.revenue import Revenue
 from .leads import LeadStore
@@ -49,7 +51,10 @@ def build(settings):
     architect = Architect(settings)
     memory = Memory(settings.data_dir / "memory.db")
     loaded = memory.sync_profile(settings.config_dir / "profile.md")
-    log.info("Memory: %d profile lines, %d memories total", loaded, memory.count())
+    known = sync_knowledge(memory, settings.config_dir / "knowledge")
+    chats = ChatArchive(settings.data_dir / "chats.db")
+    log.info("Memory: %d profile lines, %d knowledge lines, %d memories total, %d archived chats",
+             loaded, known, memory.count(), chats.count())
     ctx = CellContext(settings=settings, llm=architect.llm, findings=architect.findings, events=architect.events,
                       memory=memory, ask=make_ask(settings, architect.llm, "cells"))
     intel = Intel(ctx)
@@ -93,7 +98,8 @@ def build(settings):
 
     toolbox = build_toolbox(llm=architect.llm, memory=memory, missions=missions, open_mission=open_mission,
                             findings=architect.findings, leads=leads, revenue=revenue, notify=architect.notify,
-                            followups=followups, workspace=coder.ws, daily_mission_cap=settings.agent_daily_missions)
+                            followups=followups, workspace=coder.ws, daily_mission_cap=settings.agent_daily_missions,
+                            chats=chats)
     for name in ("merge_pull_request",):
         if name in toolbox.tools:
             approvals.executors[name] = toolbox.tools[name].fn
@@ -114,7 +120,7 @@ def build(settings):
     clair_tools = build_toolbox(llm=architect.llm, memory=memory, missions=missions, open_mission=open_mission,
                                 findings=architect.findings, leads=leads, revenue=revenue, notify=architect.notify,
                                 followups=followups, agent_name="clair", daily_mission_cap=settings.agent_daily_missions,
-                                commander=commander)
+                                commander=commander, chats=chats)
     clair = ClairAgent(toolbox=clair_tools, ask=clair_ask(bridge, make_ask(settings, architect.llm, "clair"), clair_mode),
                        approvals=approvals, events=architect.events, context_fn=architect.context_block, memory=memory)
     comms.clair_agent = clair.chat
@@ -125,7 +131,7 @@ def build(settings):
         commander.on_mission_done(m)  # The Architect reviews finished work and decides next steps
 
     operator.on_done = on_done
-    comms.commander, comms.approvals = commander, approvals
+    comms.commander, comms.approvals, comms.chats = commander, approvals, chats
     return architect, {"intel": intel, "revenue": revenue, "learner": learner}, comms
 
 
@@ -144,6 +150,12 @@ def run() -> None:
         print(f"Mission #{done['id']} {done['status']}: {done['title']}\n\n{done['result']}")
         for s in done["sources"]:
             print(f"[{s['n']}] {s['title']} {s['url']}")
+        return
+    if len(sys.argv) >= 3 and sys.argv[1] == "import-chats":
+        from pathlib import Path
+
+        n, skipped = comms.chats.import_claude_export(Path(sys.argv[2]))
+        print(f"Imported {n} chats ({skipped} empty ones skipped). {comms.chats.count()} in the archive.")
         return
     if len(sys.argv) >= 2 and sys.argv[1] == "cycle":
         print(comms.commander.cycle("manual"))

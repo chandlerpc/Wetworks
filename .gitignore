@@ -8,3 +8,6 @@ data/
 *.db
 .venv/
 .DS_Store
+
+# Files to import that should never be committed (e.g. a Claude data export)
+config/imports/

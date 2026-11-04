@@ -127,3 +127,45 @@ def test_memory_api(tmp_path):
     assert call(app, "DELETE", f"/api/memory/{r['json']['id']}", token="secret")["status"] == 200
     assert call(app, "DELETE", f"/api/memory/{r['json']['id']}", token="secret")["status"] == 404
     assert call(app, "GET", "/api/memory")["status"] == 401
+
+
+def test_knowledge_files_load_and_reload(tmp_path):
+    from wetworks.knowledge import sync_knowledge
+
+    mem = Memory(tmp_path / "m.db")
+    folder = tmp_path / "knowledge"
+    folder.mkdir()
+    (folder / "past.md").write_text("# x\n## project\n- Built SignSpeak.\n## person\n- Gregg runs a gym.\n## nonsense\n- A fact.\n")
+    assert sync_knowledge(mem, folder) == 3
+    kinds = {m["text"]: m["kind"] for m in mem.recent()}
+    assert kinds == {"Built SignSpeak.": "project", "Gregg runs a gym.": "person", "A fact.": "fact"}
+    (folder / "past.md").write_text("## project\n- Built SignSpeak.\n")
+    sync_knowledge(mem, folder)
+    assert [m["text"] for m in mem.recent()] == ["Built SignSpeak."]  # removed lines are dropped on reload
+    real = Path(__file__).parent.parent / "config" / "knowledge"
+    assert sync_knowledge(Memory(tmp_path / "m2.db"), real) >= 20
+
+
+def test_chat_archive_import_and_search(tmp_path):
+    import zipfile
+
+    from wetworks.knowledge import ChatArchive
+
+    export = [
+        {"uuid": "a1", "name": "SummitFlow pricing", "created_at": "2026-03-01T10:00:00Z",
+         "chat_messages": [{"sender": "human", "text": "What should SummitFlow charge per location?"},
+                           {"sender": "assistant", "text": "", "content": [{"type": "text", "text": "Try $150-200 per month."}]}]},
+        {"uuid": "b2", "name": "Empty", "chat_messages": []},
+        "junk",
+    ]
+    p = tmp_path / "conversations.json"
+    p.write_text(json.dumps(export))
+    arch = ChatArchive(tmp_path / "chats.db")
+    assert arch.import_claude_export(p) == (1, 2)
+    hits = arch.search("how much to charge for SummitFlow")
+    assert hits[0]["id"] == "a1" and hits[0]["date"] == "2026-03-01"
+    assert "Claude: Try $150-200 per month." in arch.read("a1")
+    z = tmp_path / "export.zip"
+    with zipfile.ZipFile(z, "w") as f:
+        f.write(p, "data/conversations.json")
+    assert arch.import_claude_export(z) == (1, 2) and arch.count() == 1  # re-import replaces
