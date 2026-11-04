@@ -295,6 +295,17 @@ have `search_past_chats` and `read_past_chat`.
 - Replies are voiced in two parts (`/api/voice/plan`): the first sentence plays while the rest is
   fetched, so she starts talking sooner.
 
+## Milestone 17: Floor polish
+
+- Role-specific figures drawn in code: The Architect (long coat, earpiece), Sleepers (hoodies),
+  Splinters (tactical vest, helmet, single visor band), Forge Operator (apron, goggles up).
+- Agents walk: to their station when working, home when idle, to a bunk when asleep; new Splinters
+  walk in from the Ready Room door. Legs and arms animate; typing at stations.
+- Event pings: a ring pops on the agent for each new activity line (green done, amber warn, red error).
+- Room lamps (brighter when busy, pulsing red when someone inside is blocked), Forge sparks with GPU
+  load, sealed-door LEDs, vignette and scanlines. All motion respects reduced-motion.
+- Mission timeline in a Splinter's dossier (every logged step); the HUD mission line opens the Ready Room.
+
 ## Next milestones
 
 1. Claude powering the agents and the Code cell (Friday).

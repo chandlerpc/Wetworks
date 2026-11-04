@@ -478,3 +478,17 @@ input:focus, textarea:focus { border-color: var(--phosphor-dim); outline: none; 
   .phone-chip { animation: none; }
 }
 body.halted .topbar { box-shadow: inset 0 -2px 0 var(--signal); }
+
+/* Floor: mission timeline in the inspect panel */
+.timeline h4 { margin: var(--s3) 0 4px; }
+.tl-request { color: var(--fog); font-size: 13.5px; margin: 0 0 var(--s2); }
+.tl { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 1px solid var(--seam); }
+.tl li { position: relative; display: grid; grid-template-columns: 4.6em 1fr; gap: var(--s2); padding: 3px 0; font-size: 13.5px; }
+.tl li::before { content: ""; position: absolute; left: -18px; top: 9px; width: 7px; height: 7px; border-radius: 1px; background: var(--seam); }
+.tl li.now::before { background: var(--phosphor); box-shadow: 0 0 8px var(--phosphor); }
+.tl li.end::before { background: var(--phosphor); }
+.tl-t { color: var(--fog); font-family: var(--mono); font-size: 12px; }
+@media (prefers-reduced-motion: reduce) { .tl li.now::before { box-shadow: none; } }
+#fh-missions { display: block; padding: 0; text-align: left; color: var(--fog); font-size: 13px; }
+#fh-missions:hover { color: var(--paper); }
+.tl-open { display: block; text-align: left; margin: 4px 0; }
