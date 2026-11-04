@@ -262,7 +262,8 @@
     <section id="pane-observer" class="pane" aria-labelledby="observer-h">
       <h2 id="observer-h">Observer</h2>
       <p class="note">Learns how your day works from your own computers. Screenshots are described by the local model and
-        deleted; work, money, password and private-browsing screens are never captured. Ideas it has show up under Ops → Needs you.</p>
+        deleted. Sensitive screens (money, passwords, work) are watched, but only the kind of task is kept: never titles,
+        amounts, numbers, names or patient details. Ideas it has show up under Ops → Needs you.</p>
       <div class="obs-status"><p id="obs-devices" class="note"></p><button type="button" id="obs-pause" class="ghost small">Pause</button></div>
       <details id="obs-setup" class="fin-imports"><summary>Start the helper on a computer</summary>
         <p class="note">On the Mac (Terminal), from your Wetworks folder. The first time, macOS asks to allow Terminal
@@ -270,7 +271,9 @@
         <pre class="obs-cmd">python3 observer/agent.py --server https://YOUR-MSI.ts.net --device mac</pre>
         <p class="note">On the MSI (Ubuntu):</p>
         <pre class="obs-cmd">python3 observer/agent.py --server http://localhost:8700 --device msi</pre>
-        <p class="note">Put the console access code in <code>~/.wetworks-observer</code> on each computer first. Never run it on a work computer.</p>
+        <p class="note">On a Windows PC with nothing installed (your work PC), from a copy of the observer folder:</p>
+        <pre class="obs-cmd">powershell -ExecutionPolicy Bypass -File observer\agent.ps1 -Server https://YOUR-MSI.ts.net -Device work</pre>
+        <p class="note">Put the console access code in <code>~/.wetworks-observer</code> (Windows: <code>%USERPROFILE%\.wetworks-observer</code>) on each computer first.</p>
       </details>
       <div id="obs-today" class="obs-today"></div>
       <h3 class="fin-h">Teach a task</h3>

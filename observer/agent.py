@@ -3,7 +3,8 @@
 
 Every few seconds it notes the app in front and its window title; about once a minute (if screenshots are on)
 it sends a screenshot that Wetworks describes in one sentence with the local model and then throws away.
-Apps and titles listed in config/observer.toml (work, money, passwords, private browsing) are never captured.
+Sensitive screens (money, passwords, work) are watched but only task-level descriptions are kept; anything in
+config/observer.toml's never_watch lists isn't captured at all.
 Pause from the console's Observer tab. No keystrokes are ever recorded.
 
   macOS:            python3 observer/agent.py --server https://<msi>.ts.net --device mac
@@ -11,7 +12,7 @@ Pause from the console's Observer tab. No keystrokes are ever recorded.
                     (reads the Windows desktop through powershell.exe)
 
 The console access code is read from WETWORKS_TOKEN or ~/.wetworks-observer (first line).
-Only run this on your own computers, never on a work-managed one.
+Only run it where you're allowed to. On a Windows PC with nothing installed, use agent.ps1 instead.
 """
 
 import argparse
@@ -129,10 +130,12 @@ class Wetworks:
             return json.loads(body or b"{}")
 
 
-def excluded(cfg: dict, app: str, title: str) -> bool:
+def never_watch(cfg: dict, app: str, title: str) -> bool:
+    """Apps/titles set to never be watched: no title, no screenshot. Sensitive screens are still watched;
+    Wetworks keeps only task-level descriptions of them."""
     a, t = app.lower(), title.lower()
-    return any(x.lower() in a for x in cfg.get("exclude_apps", [])) or any(w.lower() in t or w.lower() in a
-                                                                             for w in cfg.get("exclude_title_words", []))
+    return any(x.lower() in a for x in cfg.get("never_apps", [])) or any(w.lower() in t or w.lower() in a
+                                                                         for w in cfg.get("never_title_words", []))
 
 
 def main() -> None:
@@ -175,7 +178,7 @@ def main() -> None:
             if cfg.get("enabled"):
                 app, title, idle = front()
                 if app and idle < cfg.get("idle_after", 300):
-                    private = excluded(cfg, app, title)
+                    private = never_watch(cfg, app, title)
                     buf.append({"ts": datetime.now(timezone.utc).isoformat(), "app": "Private" if private else app,
                                 "title": "" if private else title, "secs": every_sample})
                     rec = cfg.get("recording")

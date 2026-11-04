@@ -37,23 +37,48 @@ def make(tmp_path):
     return Observer(tmp_path / "obs.db", CONFIG, tz="America/New_York")
 
 
-def test_exclusions_and_day_summary(tmp_path):
+def test_sensitive_screens_are_watched_but_details_never_kept(tmp_path):
     o = make(tmp_path)
     today = datetime.now(TZ).date()
-    o.add_samples("mac", "mac", [
-        {"ts": at(today, 0, 1), "app": "Google Chrome", "title": "Chase - Accounts", "secs": 5},
-        {"ts": at(today, 0, 2), "app": "1Password", "title": "Vault", "secs": 5},
-        {"ts": at(today, 0, 3), "app": "Microsoft Remote Desktop", "title": "NovaPACS - worklist", "secs": 5},
+    o.add_samples("msi", "windows", [
+        {"ts": at(today, 0, 1), "app": "chrome", "title": "Chase - Accounts ending 4421", "secs": 5},
+        {"ts": at(today, 0, 2), "app": "1Password", "title": "Personal vault", "secs": 5},
+        {"ts": at(today, 0, 3), "app": "mstsc", "title": "NovaPACS - SMITH^JOHN worklist", "secs": 5},
+        {"ts": at(today, 0, 4), "app": "Code", "title": "floor.js — wetworks", "secs": 5},
     ])
-    rows = o.db.execute("SELECT app, title FROM samples").fetchall()
-    assert rows == [("Private", ""), ("Private", ""), ("Private", "")]  # never stored with detail
-    o.forget("all")
+    rows = o.db.execute("SELECT app, title FROM samples ORDER BY id").fetchall()
+    assert rows == [("chrome", "(sensitive)"), ("1Password", "(sensitive)"), ("mstsc", "(work screen)"), ("Code", "floor.js — wetworks")]
+    o.add_shot("msi", "chrome", "Capital One - Statement",
+               'Reviewing a Capital One statement showing a balance of $4,812.33 for card 5521 and a "Pay Jane Doe" note')
+    o.add_shot("msi", "mstsc", "NovaPACS", "Checking a PACS worklist for patient Jane Roe, MRN 12345678, DOB 01/02/1960")
+    saved = " ".join(r[0] + r[1] for r in o.db.execute("SELECT title, description FROM shots").fetchall())
+    for gone in ("4,812", "5521", "Jane Doe", "Jane Roe", "12345678", "01/02/1960", "Capital One - Statement", "NovaPACS"):
+        assert gone not in saved, gone
+    assert "statement" in saved.lower() and "worklist" in saved.lower()
+
+
+def test_never_watch_lists_block_capture(tmp_path):
+    cfg = tmp_path / "observer.toml"
+    cfg.write_text(CONFIG.read_text().replace("watch_work_screens = true", "watch_work_screens = false")
+                   .replace("never_watch_apps = []", 'never_watch_apps = ["Signal"]'))
+    o = Observer(tmp_path / "obs.db", cfg, tz="America/New_York")
+    today = datetime.now(TZ).date()
+    o.add_samples("mac", "mac", [{"ts": at(today, 0, 1), "app": "Signal", "title": "Chat", "secs": 5},
+                                 {"ts": at(today, 0, 2), "app": "mstsc", "title": "NovaPACS", "secs": 5}])
+    assert o.db.execute("SELECT app, title FROM samples").fetchall() == [("Private", ""), ("Private", "")]
+    assert not o.add_shot("mac", "mstsc", "NovaPACS worklist", "Checking a worklist")
+    h = o.helper_config("mac")
+    assert "Signal" in h["never_apps"] and "novarad" in h["never_title_words"]
+
+
+def test_day_summary(tmp_path):
+    o = make(tmp_path)
+    today = datetime.now(TZ).date()
     workday(o, today, start=(0, 5))
     d = o.day(today)
     assert d["active_minutes"] == 130 and d["first"] == "00:05"
     assert [b["app"] for b in d["focus_blocks"]] == ["Code", "Code"] and d["switches"] == 3
     assert d["apps"][0] == {"app": "Code", "minutes": 100}
-    assert not o.add_shot("mac", "Safari", "Capital One login", "Banking")  # excluded screens are dropped
 
 
 def test_patterns_and_suggestions_need_approval(tmp_path):
@@ -122,7 +147,7 @@ def test_pause_and_api(tmp_path):
                      observer=comms.observer, open_mission=comms.open_mission_fn)
     assert call(app, "GET", "/api/observer/helper?device=mac")["status"] == 401
     cfg = call(app, "GET", "/api/observer/helper?device=mac", token="secret")["json"]
-    assert cfg["enabled"] and "novarad" in cfg["exclude_title_words"]
+    assert cfg["enabled"] and cfg["never_apps"] == [] and "novarad" not in cfg["never_title_words"]
     now = datetime.now(timezone.utc).isoformat()
     r = call(app, "POST", "/api/observer/samples", token="secret",
              body={"device": "mac", "platform": "mac", "samples": [{"ts": now, "app": "Code", "title": "x", "secs": 5}]})

@@ -356,10 +356,14 @@ have `search_past_chats` and `read_past_chat`.
   screencapture; the MSI from WSL through powershell.exe). Every 5–10 s it reports the foreground app,
   window title and idle time; while active, a screenshot every `screenshot_every_seconds`. It polls its
   config every 15 s, so Pause and Record from the console take effect quickly. No keystrokes.
-- `wetworks/observer.py`: excluded apps and title words (work/patient screens, money, passwords, private
-  browsing) are stored only as "Private" time, checked on the helper and again on the server.
-  Screenshots are described in one sentence by the local vision model (Gemma), scrubbed, and never
-  written to disk. Raw activity is pruned after `keep_days`.
+- `observer/agent.ps1`: the same helper in PowerShell only, for Windows PCs where nothing can be
+  installed (Patrick's work PC, with his employer's approval).
+- `wetworks/observer.py`: three levels. Sensitive screens (money, passwords, messages) and work screens
+  (Novarad, PACS, patient) are watched so their workflows can be learned, but no window titles are kept
+  and screenshots get a task-level prompt plus `strip_details` (patient scrubber, amounts, any 3+ digit
+  number, quoted text). `never_watch_*` lists (and work screens when `watch_work_screens = false`) are
+  "Private" time only, checked on the helper and again on the server. Images are never written to disk.
+  Raw activity is pruned after `keep_days`.
 - Day view: active time, apps, focus blocks (25+ min), context switches, hourly strip, what was on
   screen. Patterns over 14 days: usual start and end, morning routine, daily apps.
 - Nightly (23:15): a digest by the local model, pruning, and suggestions as approval cards

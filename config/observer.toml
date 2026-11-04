@@ -1,5 +1,6 @@
 # The Observer: learns how your day works from your Mac and the MSI, on your own machines only.
-# Never install the helper on a Novarad / work-managed computer. Everything stays on the MSI and is
+# Run the helper only on computers where you're allowed to (Patrick has approval for his work PC).
+# Everything stays on the MSI and is
 # only read by the local model. Edit freely; the helper picks changes up within a minute.
 
 [observer]
@@ -19,13 +20,21 @@ keep_days = 14
 # What the morning brief (and Discord) may say: "summary" = hours active and focus blocks only, "off".
 brief = "summary"
 
-# Never record these apps: time is counted as "Private" with no title and no screenshot.
-exclude_apps = ["1Password", "Keychain Access", "Bitwarden", "KeePass", "KeePassXC", "Messages", "FaceTime",
-                "Signal", "WhatsApp", "Telegram", "Photos", "Wallet"]
+# Sensitive screens are watched so The Observer learns those workflows too, but none of their details
+# are kept: no window titles, and screenshots are described at task level ("reviewing a bank statement")
+# with amounts, numbers, names, emails and patient identifiers stripped before anything is saved.
+sensitive_apps = ["1Password", "Keychain Access", "Bitwarden", "KeePass", "KeePassXC", "Messages", "FaceTime",
+                  "Signal", "WhatsApp", "Telegram", "Photos", "Wallet"]
+sensitive_title_words = ["bank", "chase", "amex", "american express", "capital one", "paypal", "venmo", "credit karma",
+                         "password", "sign in", "log in", "login", "incognito", "inprivate", "private browsing",
+                         "private window"]
 
-# Same for any window whose title contains one of these (case-insensitive). Work and patient screens,
-# money, passwords and private browsing are all excluded.
-exclude_title_words = ["novarad", "novapacs", "nova ris", "pacs", "patient", "mychart", "epic hyperspace",
-                       "bank", "chase", "amex", "american express", "capital one", "paypal", "venmo", "credit karma",
-                       "password", "sign in", "log in", "login", "incognito", "inprivate", "private browsing",
-                       "private window"]
+# Novarad / patient screens. Same no-details rule, plus the patient-detail scrubber. Set to false to stop
+# watching them at all (they then count as "Private" time only). Check your employer's policy: viewing
+# patient data on a personal machine can be covered even when nothing is saved.
+watch_work_screens = true
+work_title_words = ["novarad", "novapacs", "nova ris", "pacs", "patient", "mychart", "epic hyperspace"]
+
+# Never watched at all: time counts as "Private", nothing else. Empty by default.
+never_watch_apps = []
+never_watch_title_words = []

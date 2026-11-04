@@ -5,7 +5,7 @@ import json
 from datetime import datetime, timedelta
 
 from ..findings import Finding
-from ..observer import SHOT_PROMPT, Observer
+from ..observer import SENSITIVE_PROMPT, SHOT_PROMPT, Observer
 from .base import Cell
 
 DIGEST = """Here is how Patrick's day went, from his own activity tracker (apps, window titles, and one-line
@@ -44,12 +44,13 @@ class ObserverCell(Cell):
     # ---- screenshots ---------------------------------------------------------------------
     def describe(self, image: bytes, device: str, app: str, title: str, recording: int = 0) -> str | None:
         """One sentence about a screenshot; the image itself is never stored."""
-        if self.observer.excluded(app, title) or self.ctx.settings.dry_run:
+        level = self.observer.sensitivity(app, title)
+        if level == "never" or self.ctx.settings.dry_run:
             return None
         if self.ctx.llm.paused.is_set():  # The Forge has the GPU
             return None
         try:
-            text = self.ctx.llm.ollama.describe_image(image, SHOT_PROMPT)
+            text = self.ctx.llm.ollama.describe_image(image, SHOT_PROMPT if level == "normal" else SENSITIVE_PROMPT)
         except Exception as e:
             self.log.info("Couldn't describe screenshot: %s", e)
             return None

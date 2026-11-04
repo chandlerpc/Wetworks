@@ -128,7 +128,8 @@ articles or notes with **Add file**; when you mark a ticket solved, what fixed i
 ## The Observer
 
 Learns how your day works on your own Mac and the MSI and suggests how Wetworks can fit around it.
-Never run it on a work computer. Put the console access code in `~/.wetworks-observer` on each machine,
+Run it only where you're allowed to (you have approval for your work PC). Put the console access code
+in `~/.wetworks-observer` on each machine (on Windows: `%USERPROFILE%\.wetworks-observer`),
 then start the helper when you want it watching (Ctrl+C stops it; Pause in the console works too).
 
 On the Mac, from your Wetworks folder (macOS will ask to allow Terminal under Accessibility and
@@ -144,7 +145,16 @@ On the MSI, in Ubuntu:
 python3 observer/agent.py --server http://localhost:8700 --device msi
 ```
 
-What it records and what it never records is set in `config/observer.toml`. Ideas it has (brief times,
+On a Windows PC with nothing installed (your work PC), use the PowerShell helper. It needs Tailscale
+(or the same network) to reach the MSI:
+
+```
+powershell -ExecutionPolicy Bypass -File observer\agent.ps1 -Server https://YOUR-MSI.ts.net -Device work
+```
+
+Sensitive screens (money, passwords, Novarad and patient screens) are watched so it learns those
+workflows, but only the kind of task is kept: never window titles, amounts, numbers, names or patient
+details. What counts as sensitive, and anything never to watch, is set in `config/observer.toml`. Ideas it has (brief times,
 a morning prep, automations) arrive as approval cards; nothing changes without your OK.
 
 ## The Forge (training)

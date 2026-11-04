@@ -20,6 +20,21 @@ from zoneinfo import ZoneInfo
 SHOT_PROMPT = ("In one sentence, say what the person is doing on this screen (the task, not the pixels). Name the app "
                "and the project or topic if visible. Do not copy any personal details, names, numbers, emails, "
                "messages or passwords.")
+SENSITIVE_PROMPT = ("In one short sentence, say what kind of task the person is doing on this screen, at the level of "
+                    "'reviewing a bank statement' or 'checking a patient worklist in a PACS viewer'. Describe only the "
+                    "task and the app. Never include any names, amounts, balances, account or ID numbers, dates of "
+                    "birth, addresses, messages, passwords, or anything read from the screen's contents.")
+
+
+def strip_details(text: str) -> str:
+    """For sensitive screens: patient details, money, any number of 3+ digits, quoted text."""
+    from .dayjob import scrub
+
+    t = scrub(text or "")[0]
+    t = re.sub(r"[$€£]\s?\d[\d,]*(?:\.\d+)?", "[AMOUNT]", t)
+    t = re.sub(r"\d[\d,./-]{2,}", "[NUMBER]", t)
+    t = re.sub(r"[\"“”'‘’][^\"“”'‘’]{3,}[\"“”'‘’]", "[TEXT]", t)
+    return t
 PRIVATE = "Private"
 
 
@@ -76,29 +91,50 @@ class Observer:
         rec = self.active_recording(device)
         return {"enabled": bool(c.get("enabled", True)) and not self.paused(), "paused": self.paused(),
                 "screenshots": bool(c.get("screenshots", True)), "shot_every": int(c.get("screenshot_every_seconds", 60)),
-                "idle_after": int(c.get("idle_after_seconds", 300)), "exclude_apps": c.get("exclude_apps", []),
-                "exclude_title_words": c.get("exclude_title_words", []), "recording": rec,
+                "idle_after": int(c.get("idle_after_seconds", 300)), "never_apps": self._never_apps(),
+                "never_title_words": self._never_words(), "recording": rec,
                 "record_every": 5}
 
-    def excluded(self, app: str, title: str) -> bool:
+    def _never_apps(self) -> list:
+        return list(self.config().get("never_watch_apps", []))
+
+    def _never_words(self) -> list:
+        c = self.config()
+        return list(c.get("never_watch_title_words", [])) + ([] if c.get("watch_work_screens", True) else c.get("work_title_words", []))
+
+    def sensitivity(self, app: str, title: str) -> str:
+        """never (not watched) | work | sensitive | normal."""
         c = self.config()
         a, t = (app or "").lower(), (title or "").lower()
-        if any(x.lower() == a or x.lower() in a for x in c.get("exclude_apps", [])):
-            return True
-        return any(w.lower() in t or w.lower() in a for w in c.get("exclude_title_words", []))
+        has = lambda words: any(w.lower() in t or w.lower() in a for w in words)
+        if any(x.lower() in a for x in self._never_apps()) or has(self._never_words()):
+            return "never"
+        if has(c.get("work_title_words", [])):
+            return "work"
+        if any(x.lower() in a for x in c.get("sensitive_apps", [])) or has(c.get("sensitive_title_words", [])):
+            return "sensitive"
+        return "normal"
+
+    def excluded(self, app: str, title: str) -> bool:
+        return self.sensitivity(app, title) == "never"
 
     # ---- intake -----------------------------------------------------------------------------
     def add_samples(self, device: str, platform: str, samples: list[dict]) -> int:
         device = re.sub(r"[^\w .-]", "", device)[:40] or "device"
         rows = []
+        if isinstance(samples, dict):  # PowerShell sends a one-item list as a bare object
+            samples = [samples]
         for s in samples[:2000]:
             try:
                 ts = datetime.fromisoformat(str(s["ts"]).replace("Z", "+00:00")).astimezone(timezone.utc).isoformat()
             except (KeyError, ValueError):
                 continue
             app, title = str(s.get("app", ""))[:80], str(s.get("title", ""))[:200]
-            if self.excluded(app, title):
+            level = self.sensitivity(app, title)
+            if level == "never":
                 app, title = PRIVATE, ""
+            elif level in ("work", "sensitive"):
+                title = "(work screen)" if level == "work" else "(sensitive)"  # the app is kept, its window title isn't
             rows.append((ts, device, app or "Unknown", title, max(1, min(600, int(s.get("secs", 5))))))
         with self.lock:
             self.db.executemany("INSERT INTO samples (ts, device, app, title, secs) VALUES (?, ?, ?, ?, ?)", rows)
@@ -108,11 +144,15 @@ class Observer:
         return len(rows)
 
     def add_shot(self, device: str, app: str, title: str, description: str, recording: int = 0) -> int | None:
-        if self.excluded(app, title) or not description:
+        level = self.sensitivity(app, title)
+        if level == "never" or not description:
             return None
         from .dayjob import scrub  # belt and braces: strip anything that looks like a personal detail
 
-        description = scrub(description)[0][:400]
+        if level in ("work", "sensitive"):
+            description, title = strip_details(description)[:240], ("(work screen)" if level == "work" else "(sensitive)")
+        else:
+            description = scrub(description)[0][:400]
         with self.lock:
             cur = self.db.execute("INSERT INTO shots (ts, device, app, title, description, recording) VALUES (?, ?, ?, ?, ?, ?)",
                                   (_now().isoformat(), device[:40], app[:80], title[:200], description, recording))
