@@ -125,7 +125,8 @@ Other vendors (Gemini, Grok, OpenAI) plug in behind the same `LLM` interface lat
 
 ## Milestone 6: C.L.a.i.R's voice
 
-- Hearing: `whisper` container (faster-whisper `small.en`) on the GPU. Free and private.
+- Hearing: `whisper` container (faster-whisper `medium.en`) on the CPU, so the MSI's 8GB RTX 4070
+  stays dedicated to the local model. Free and private.
 - Speaking: Azure neural TTS, `en-IE-EmilyNeural` (young Irish female). Free tier 500k
   characters/month; `tts_monthly_char_cap` (480k) stops speech before that and falls back to text.
   The Azure key stays on the MSI; the phone only receives MP3 audio.

@@ -39,23 +39,17 @@ services:
               capabilities: [gpu]
     logging: *logging
 
-  # C.L.a.i.R's ears: speech-to-text on the GPU (free, private)
+  # C.L.a.i.R's ears: speech-to-text (free, private). Runs on the CPU so the 8GB GPU stays
+  # free for the local model; the MSI's CPU handles medium.en comfortably.
   whisper:
-    image: onerahmet/openai-whisper-asr-webservice:latest-gpu
+    image: onerahmet/openai-whisper-asr-webservice:latest
     container_name: wetworks-whisper
     restart: unless-stopped
     environment:
       ASR_ENGINE: faster_whisper
-      ASR_MODEL: ${WHISPER_MODEL:-small.en}   # small.en, medium.en, distil-large-v3 (more accurate, more GPU memory)
+      ASR_MODEL: ${WHISPER_MODEL:-medium.en}   # small.en (faster) or medium.en (more accurate)
     volumes:
       - whisper-models:/root/.cache
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
     logging: *logging
 
   # Free self-hosted web search
