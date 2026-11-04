@@ -401,9 +401,9 @@ input:focus, textarea:focus { border-color: var(--phosphor-dim); outline: none; 
 .fh-gap { margin-top: var(--s3) !important; }
 #fh-lessons-bar { background: var(--fog); }
 #fh-lessons-bar.ready { background: var(--phosphor); }
-.fh-bl li { display: grid; grid-template-columns: 4.4em minmax(0,1fr); gap: var(--s2); padding: 1px 0; color: #B4BEB2; }
+.fh-bl li { display: grid; grid-template-columns: 5.6em minmax(0,1fr); gap: var(--s2); padding: 1px 0; color: #B4BEB2; }
 .fh-bl li .m { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.fh-bl li .t { color: var(--fog); }
+.fh-bl li .t { color: var(--fog); white-space: nowrap; }
 .fh-bl li.error .m { color: var(--signal); }
 .fh-bl li.warn .m { color: var(--amber); }
 .fh-bl li.done .m, .fh-bl li.start .m { color: var(--phosphor); }

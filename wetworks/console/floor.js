@@ -1,487 +1,479 @@
-// The Floor: an isometric ops-center view of Wetworks. Purely a window onto /api/floor;
-// nothing here drives the work. Everything is drawn in code (no image assets).
+// The Floor: a top-down 3/4 pixel-art ops center. Purely a window onto /api/floor; nothing here
+// drives the work. Room art comes from the licensed Retro Cybercity pack in /static/art (not in
+// git; see README). Without it, the Floor draws plain stand-in blocks so it always works.
 (() => {
   "use strict";
   const $ = (s, el = document) => el.querySelector(s);
-  const TW = 64, TH = 32, WALL = 46;               // tile size and wall height (px at zoom 1)
+  const T = 16;                                   // tile size in art pixels
   const C = {
-    night: "#0A0F0B", hull: "#121A14", seam: "#243028", fog: "#7E8A80", paper: "#D7DFD5",
+    night: "#07060E", hull: "#121A14", seam: "#243028", fog: "#7E8A80", paper: "#D7DFD5",
     phosphor: "#9BE37D", dim: "#3E5C33", amber: "#E8A33D", signal: "#FF4D3D", steel: "#6FA8B8", sepia: "#B39B72",
+    ink: "#141226", walltop: "#3A3366", walledge: "#5E54A0", corridor: "#17142A",
   };
   const VENDOR = { local: C.phosphor, google: "#7FB2E5", anthropic: C.amber, xai: "#C9C9C9", gated: "#E9C46A" };
   const VENDOR_NAME = { local: "Local model (free)", google: "Gemini", anthropic: "Claude", xai: "Grok", gated: "Approval-only model" };
   const STATE_NAME = { idle: "Idle", working: "Working", thinking: "Thinking", blocked: "Blocked", asleep: "Asleep" };
 
-  // Room layout on the tile grid: [gx, gy, width, depth], tint, props.
-  const LAYOUT = {
-    intel:    { r: [0, 0, 5, 5],  tint: C.phosphor, props: ["radar", "desk"] },
-    revenue:  { r: [6, 0, 6, 5],  tint: C.amber,    props: ["board", "table"] },
-    ready:    { r: [13, 0, 6, 5], tint: C.steel,    props: ["lockers", "bench"] },
-    archives: { r: [0, 6, 5, 5],  tint: C.sepia,    props: ["cabinets", "bunk"] },
-    command:  { r: [6, 6, 6, 5],  tint: C.phosphor, props: ["table", "phone", "screens"] },
-    comms:    { r: [13, 6, 4, 5], tint: "#7FB2E5",  props: ["booth"] },
-    codebay:  { r: [0, 12, 5, 5], tint: C.steel,    props: ["terminals", "racks"] },
-    forge:    { r: [6, 12, 6, 5], tint: C.signal,   props: ["gpu"] },
-    dayjob:   { r: [13, 12, 2, 4], sealed: true },
-    finance:  { r: [15, 12, 2, 4], sealed: true },
-    gamedev:  { r: [17, 12, 2, 4], sealed: true },
-    content:  { r: [19, 12, 2, 4], sealed: true },
+  // ---- art ---------------------------------------------------------------------------------
+  const SHEETS = { A: "interior_A5.png", B: "interior_B.png", C: "interior_C.png", D: "interior_D.png", E: "interior_E.png" };
+  const img = {};
+  let artReady = false, artTried = false;
+  function loadArt() {
+    if (artTried) return; artTried = true;
+    let left = Object.keys(SHEETS).length, ok = true;
+    Object.entries(SHEETS).forEach(([k, f]) => {
+      const i = new Image();
+      i.onload = () => { if (--left === 0 && ok) { artReady = true; staticLayer = null; } };
+      i.onerror = () => { ok = false; --left; };
+      i.src = `/static/art/${f}`;
+      img[k] = i;
+    });
+  }
+  // Sprites: [sheet, x, y, w, h] in art pixels, plus where light comes from (relative, optional).
+  const S = {
+    deskPC: ["B", 182, 180, 36, 28, { glow: [10, 4, "#6FD3FF"] }], deskPCv: ["B", 182, 212, 36, 28, { glow: [10, 4, "#B89CFF"] }],
+    desk: ["B", 134, 120, 36, 24], deskMug: ["B", 182, 119, 36, 25], deskV: ["B", 134, 216, 36, 24],
+    sideTable: ["B", 230, 120, 20, 20], sideItems: ["B", 230, 182, 20, 22], sideVase: ["B", 230, 213, 20, 23],
+    chairR: ["B", 128, 53, 16, 25], chairG: ["B", 192, 53, 16, 25], chairB: ["B", 128, 85, 16, 25], chairP: ["B", 192, 85, 16, 25],
+    chairRside: ["B", 161, 53, 12, 25], chairGside: ["B", 225, 53, 12, 25],
+    cabPurple: ["B", 128, 0, 32, 48], cabNavy: ["B", 160, 0, 32, 48], cabRed: ["B", 192, 0, 32, 48], cabSteel: ["B", 224, 0, 32, 48],
+    chart: ["B", 49, 161, 30, 21, { glow: [15, 10, "#FF8FB0"] }], globe: ["B", 81, 161, 14, 15, { glow: [7, 7, "#6FD3FF"] }],
+    data1: ["B", 97, 174, 14, 26, { glow: [7, 13, "#9BE37D"] }], data2: ["B", 113, 162, 14, 26, { glow: [7, 13, "#9BE37D"] }],
+    clock: ["B", 81, 180, 14, 15], skyline: ["B", 87, 100, 34, 26], sunset: ["B", 87, 132, 34, 26], abstract: ["B", 87, 36, 34, 26],
+    shelfTV: ["B", 5, 87, 23, 19], shelfTrophy: ["B", 5, 119, 23, 19], shelfPics: ["B", 5, 151, 23, 19],
+    pod: ["B", 49, 113, 14, 39], pod2: ["B", 65, 113, 14, 39],
+    drawers: ["C", 195, 6, 26, 20], drawersB: ["C", 195, 38, 26, 20], drawersItems: ["C", 195, 66, 26, 24], drawersPics: ["C", 195, 98, 26, 24],
+    termP: ["C", 196, 128, 23, 16, { glow: [6, 6, "#B89CFF"] }], termB: ["C", 228, 128, 23, 16, { glow: [6, 6, "#6FD3FF"] }],
+    holo: ["C", 195, 183, 9, 22, { glow: [4, 6, "#FF9BD8"] }],
+    uDesk: ["C", 128, 26, 64, 54], uDeskB: ["C", 128, 90, 64, 54], uDeskP: ["C", 128, 218, 64, 38],
+    deskOlivePC: ["C", 0, 213, 31, 21, { glow: [10, 6, "#6FD3FF"] }], deskBlue: ["C", 32, 216, 31, 18], deskRedStuff: ["C", 64, 217, 31, 17],
+    rugG: ["D", 7, 7, 35, 36], rugP: ["D", 55, 7, 35, 36], rugB: ["D", 7, 55, 35, 36], rugR: ["D", 55, 55, 35, 36],
+    conf: ["E", 144, 4, 32, 91], confNavy: ["E", 208, 4, 32, 91], tableP: ["D", 16, 106, 32, 48], tableN: ["D", 80, 106, 32, 48],
   };
-  // Where each agent stands (tile coords inside its room); splinters fill numbered slots.
-  const HOME = { architect: [9, 8.2], clair: [15, 8.4], intel: [2.6, 2.2], revenue: [9, 2.6], learner: [2.4, 8.6], forge: [8.4, 14.6] };
-  const BUNK = { intel: [1.2, 3.6], revenue: [7.2, 3.8], learner: [1.2, 9.6] };
-  // Where they go to work (walk there when busy, back home when idle).
-  const STATION = { architect: [8.4, 7.1], intel: [1.9, 3.0], revenue: [8.6, 1.3], learner: [3.4, 7.2], forge: [7.6, 13.9] };
-  const SLOTS = { ready: [[14.4, 2], [16, 2], [17.6, 2], [14.4, 3.6], [16, 3.6], [17.6, 3.6]],
-                  codebay: [[1.4, 13.6], [2.8, 13.6], [1.4, 15.2], [2.8, 15.2]] };
+  const WALLFACE = { lavender: [16, 0], teal: [16, 48], wood: [16, 96] };          // 48x48 panels on sheet A
+  const FLOOR = { tan: [80, 0, 48], purple: [80, 96, 48], navyTile: [80, 208, 48], maroonTile: [80, 160, 48],
+                  checkNavy: [0, 208, 16], dotsNavy: [16, 240, 16], diamondNavy: [0, 192, 16] };
+
+  // ---- the map (tiles) -----------------------------------------------------------------------
+  // Each room: rect incl. walls [x, y, w, h], wall style, floor, door (which wall, offset), tint for its lamp.
+  const ROOM = {
+    intel:    { r: [1, 1, 13, 10],  wall: "teal",     floor: "checkNavy",  door: ["s", 5], tint: C.phosphor },
+    revenue:  { r: [15, 1, 14, 10], wall: "wood",     floor: "purple",        door: ["s", 6], tint: C.amber },
+    ready:    { r: [30, 1, 17, 10], wall: "lavender", floor: "navyTile",   door: ["s", 7], tint: C.steel },
+    archives: { r: [1, 14, 11, 10], wall: "wood",     floor: "dotsNavy",     door: ["n", 4], tint: C.sepia },
+    command:  { r: [13, 14, 16, 10], wall: "teal",    floor: "maroonTile", door: ["n", 7], tint: C.phosphor },
+    comms:    { r: [30, 14, 7, 10], wall: "lavender", floor: "dotsNavy",   door: ["n", 2], tint: "#7FB2E5" },
+    codebay:  { r: [38, 14, 9, 10], wall: "teal",     floor: "diamondNavy", door: ["n", 3], tint: C.steel },
+    forge:    { r: [1, 26, 15, 9],  wall: "wood",     floor: "checkNavy",  door: ["n", 6], tint: C.signal },
+    dayjob:   { r: [17, 26, 7, 9], sealed: true }, finance: { r: [24, 26, 7, 9], sealed: true },
+    gamedev:  { r: [31, 26, 8, 9], sealed: true },  content: { r: [39, 26, 8, 9], sealed: true },
+  };
+  const MAP_W = 48, MAP_H = 36, FACE = 3;   // wall faces are 3 tiles tall
+  const CORRIDORS = [[1, 11, 46, 3], [1, 24, 46, 2]];
+  // Interior floor origin of a room (top-left floor tile, under the wall face)
+  const inner = (id) => { const [x, y, w, h] = ROOM[id].r; return { x: x + 1, y: y + 1 + FACE, w: w - 2, h: h - 2 - FACE }; };
+
+  // Props per room: [sprite, tx, ty] in tiles from the room's floor origin. Negative ty = on the wall face.
+  const PROPS = {
+    intel: [["data1", 0.5, -2.4], ["globe", 2, -2.1], ["data2", 3.5, -2.4], ["shelfTV", 7.5, -2.3], ["deskPC", 0.5, 0.4], ["chairB", 1.4, 1.7],
+            ["deskPCv", 5, 0.4], ["chairP", 5.9, 1.7], ["drawersItems", 9, 0.2]],
+    revenue: [["chart", 1, -2.3], ["chart", 4, -2.3], ["clock", 7.5, -2.2], ["data2", 9.5, -2.4], ["uDesk", 2, 0.6], ["chairR", 3.4, 3],
+              ["deskRedStuff", 8, 0.3], ["chairRside", 10.2, 0.6], ["sideVase", 10.6, 3.2]],
+    ready: [["cabNavy", 0.3, -2], ["cabSteel", 2.3, -2], ["cabNavy", 4.3, -2], ["cabSteel", 6.3, -2], ["skyline", 10.2, -2.3],
+            ["pod", 13.4, 0.2], ["pod2", 14.3, 0.2], ["rugB", 6, 1.6]],
+    archives: [["shelfPics", 0.6, -2.3], ["shelfTrophy", 3, -2.3], ["sunset", 5.6, -2.4], ["drawers", 0.2, 0.2], ["drawersB", 2, 0.2],
+               ["drawersPics", 3.8, 0.2], ["deskMug", 5.4, 1.6], ["chairGside", 7.7, 1.8]],
+    command: [["data1", 1, -2.4], ["chart", 3, -2.3], ["globe", 6.2, -2.1], ["chart", 7.6, -2.3], ["data2", 10, -2.4], ["data1", 11.2, -2.4],
+              ["rugG", 4.6, 0.6], ["confNavy", 5.6, 0.1, true], ["holo", 1.2, 0.4], ["holo", 12.6, 0.4]],
+    comms: [["abstract", 0.4, -2.4], ["deskOlivePC", 0.8, 0.8], ["chairG", 1.5, 2.1], ["holo", 4.3, 0.3]],
+    codebay: [["data2", 0.5, -2.4], ["data1", 2, -2.4], ["globe", 4.5, -2.1], ["uDeskB", 1.2, 0.6], ["termB", 1.6, 0.8], ["termP", 4.3, 0.8], ["chairB", 2.6, 3]],
+    forge: [["cabRed", 0.5, -2], ["cabPurple", 2.5, -2], ["cabRed", 4.5, -2], ["cabPurple", 6.5, -2], ["cabRed", 8.5, -2], ["termP", 10.5, 0.2], ["chairRside", 11.8, 0.6]],
+  };
+  // Where people stand (tiles from floor origin). Stations when working, home when idle, bunk when asleep.
+  const SPOT = {
+    architect: { room: "command", home: [7.4, 4.5], station: [2.4, 1.8] },
+    clair:     { room: "comms",   home: [3.3, 3.3], station: [2.2, 2.6] },
+    intel:     { room: "intel",   home: [8, 3.5], station: [2, 2.4], bunk: [9.2, 3.7] },
+    revenue:   { room: "revenue", home: [6, 3.6], station: [3.9, 3.4], bunk: [10, 3.7] },
+    learner:   { room: "archives", home: [6.6, 3.5], station: [2.4, 2], bunk: [7.4, 3.8] },
+    forge:     { room: "forge",   home: [8, 3.5], station: [4.5, 2.2] },
+  };
+  const SLOTS = { ready: [[2, 2.2], [4, 2.2], [6, 2.2], [9, 2.4], [11, 2.4], [13, 2.4]], codebay: [[3.3, 3.6], [5, 3.6], [1, 3.6], [6, 2]] };
 
   let canvas, ctx, dpr = 1, view = { x: 0, y: 0, z: 1 }, data = null, hover = null, selected = null;
-  let hits = [], t0 = performance.now(), raf = 0, poll = 0, dragging = null, lastApprovals = 0, sound = false;
-  const motion = {};               // agent id -> current [gx, gy] (they walk toward their target)
+  let hits = [], raf = 0, poll = 0, dragging = null, lastApprovals = 0, sound = false;
+  const motion = {};               // agent id -> current [tx, ty] in map tiles
   let pings = [], seenEvent = 0, lastFrame = 0, sparks = [];
   const timelines = {};            // mission id -> { at, mission }
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let world = null, wctx = null, staticLayer = null, light = null, lctx = null;
 
-  // ---- projection ---------------------------------------------------------------------
-  const iso = (gx, gy, h = 0) => [(gx - gy) * TW / 2, (gx + gy) * TH / 2 - h];
-  function toScreen(gx, gy, h = 0) {
-    const [x, y] = iso(gx, gy, h);
-    return [x * view.z + view.x, y * view.z + view.y];
-  }
-  function fit() {
-    const w = canvas.clientWidth, h = canvas.clientHeight;
-    const xs = [iso(0, 17)[0], iso(21, 0)[0]], ys = [iso(0, 0, WALL)[1], iso(21, 17)[1]];
-    const sw = xs[1] - xs[0], sh = ys[1] - ys[0];
-    view.z = Math.min((w - 80) / sw, (h - 150) / sh, 1.6);
-    view.x = w / 2 - ((xs[0] + xs[1]) / 2) * view.z;
-    view.y = (h + 20) / 2 - ((ys[0] + ys[1]) / 2) * view.z;
-  }
-
-  // ---- drawing primitives ---------------------------------------------------------------
-  function poly(pts, fill, stroke) {
-    ctx.beginPath();
-    pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
-    ctx.closePath();
-    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
-    if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke(); }
-  }
-  function mix(hex, a) { // hex + alpha
-    const n = parseInt(hex.slice(1), 16);
-    return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`;
-  }
-  // An isometric box: base at (gx, gy) size (w, d) in tiles, height h px.
-  function box(gx, gy, w, d, h, top, left, right) {
-    const a = toScreen(gx, gy, h), b = toScreen(gx + w, gy, h), c = toScreen(gx + w, gy + d, h), e = toScreen(gx, gy + d, h);
-    const b0 = toScreen(gx + w, gy), c0 = toScreen(gx + w, gy + d), e0 = toScreen(gx, gy + d);
-    poly([e, c, c0, e0], left);
-    poly([b, c, c0, b0], right);
-    poly([a, b, c, e], top);
-    return [a, b, c, e];
-  }
-
-  // ---- rooms ----------------------------------------------------------------------------
-  function drawRoom(id, now) {
-    const L = LAYOUT[id], [gx, gy, w, d] = L.r;
-    const room = data.rooms.find((r) => r.id === id) || { name: id };
-    const corners = [toScreen(gx, gy), toScreen(gx + w, gy), toScreen(gx + w, gy + d), toScreen(gx, gy + d)];
-    const isHover = hover && hover.type === "room" && hover.id === id;
-    const isSel = selected && selected.type === "room" && selected.id === id;
-
-    if (L.sealed) {
-      poly(corners, "#0C110D", isHover || isSel ? C.amber : C.seam);
-      // closed door on the back-right wall with hazard stripes
-      const p = [toScreen(gx + 0.3, gy, 0), toScreen(gx + w - 0.3, gy, 0), toScreen(gx + w - 0.3, gy, WALL * 0.85), toScreen(gx + 0.3, gy, WALL * 0.85)];
-      poly(p, "#15100A", C.amber);
-      ctx.save(); ctx.beginPath(); p.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.clip();
-      ctx.strokeStyle = mix(C.amber, 0.55); ctx.lineWidth = 4 * view.z;
-      for (let k = -6; k < 12; k++) { const [x, y] = toScreen(gx + k * 0.35, gy, 0); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 30 * view.z, y - 40 * view.z); ctx.stroke(); }
-      ctx.restore();
-      // status LED over the door
-      const [lx, ly] = toScreen(gx + w / 2, gy, WALL * 0.85 + 7);
-      const on = reduced || Math.floor((now + gx * 300) / 900) % 2 === 0;
-      ctx.fillStyle = on ? C.amber : mix(C.amber, 0.25); ctx.fillRect(lx - 2 * view.z, ly - 2 * view.z, 4 * view.z, 4 * view.z);
-      label(room.name, gx + w / 2, gy + d / 2, C.amber, 0.75, "SEALED");
-      hits.push({ type: "room", id, poly: corners });
-      return;
-    }
-
-    // floor
-    poly(corners, mix(L.tint, 0.06), null);
-    ctx.strokeStyle = mix(L.tint, 0.08); ctx.lineWidth = 1;
-    for (let i = 1; i < w; i++) { const [x1, y1] = toScreen(gx + i, gy), [x2, y2] = toScreen(gx + i, gy + d); ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); }
-    for (let j = 1; j < d; j++) { const [x1, y1] = toScreen(gx, gy + j), [x2, y2] = toScreen(gx + w, gy + j); ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); }
-    // back walls (top-left and top-right edges)
-    const wl = [toScreen(gx, gy + d), toScreen(gx, gy), toScreen(gx, gy, WALL), toScreen(gx, gy + d, WALL)];
-    const wr = [toScreen(gx, gy), toScreen(gx + w, gy), toScreen(gx + w, gy, WALL), toScreen(gx, gy, WALL)];
-    poly(wl, "#111813", null); poly(wr, "#141C16", null);
-    ctx.strokeStyle = mix(L.tint, isHover || isSel ? 0.9 : 0.35); ctx.lineWidth = isSel ? 2 : 1;
-    ctx.beginPath(); ctx.moveTo(...wl[3]); ctx.lineTo(...wl[2]); ctx.lineTo(...wr[2]); ctx.stroke();
-    poly(corners, null, isHover || isSel ? mix(L.tint, 0.8) : mix(L.tint, 0.18));
-
-    // overhead lamp: a soft pool of light; red alert wash if someone in here is blocked
-    const [px, py] = toScreen(gx + w / 2, gy + d / 2);
-    const alert = data.agents.some((a) => a.room === id && a.state === "blocked");
-    const busy = data.agents.some((a) => a.room === id && ["working", "thinking"].includes(a.state));
-    const lamp = ctx.createRadialGradient(px, py, 4, px, py, 120 * view.z);
-    const tone = alert ? C.signal : L.tint, pulse = alert && !reduced ? 0.5 + 0.5 * Math.sin(now / 260) : 1;
-    lamp.addColorStop(0, mix(tone, (alert ? 0.16 : busy ? 0.1 : 0.05) * pulse)); lamp.addColorStop(1, mix(tone, 0));
-    ctx.save(); ctx.beginPath(); corners.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.clip();
-    ctx.fillStyle = lamp; ctx.fillRect(px - 140 * view.z, py - 80 * view.z, 280 * view.z, 160 * view.z);
-    ctx.restore();
-
-    // forge heat glow tied to real GPU load
-    if (id === "forge") {
-      const util = (data.hud.gpu && data.hud.gpu.util) || 0, train = data.hud.gpu && data.hud.gpu.training;
-      const heat = Math.max(util / 100, train ? 0.6 : 0) * (reduced ? 1 : 0.85 + 0.15 * Math.sin(now / 400));
-      const [cx, cy] = toScreen(gx + w / 2, gy + d / 2);
-      const g = ctx.createRadialGradient(cx, cy, 4, cx, cy, 170 * view.z);
-      g.addColorStop(0, mix(C.signal, 0.08 + 0.4 * heat)); g.addColorStop(1, mix(C.signal, 0));
-      ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(cx, cy, 170 * view.z, 85 * view.z, 0, 0, Math.PI * 2); ctx.fill();
-    }
-    L.props.forEach((p) => prop(p, id, gx, gy, w, d, now));
-    label(room.name, gx + w / 2, gy, mix(L.tint, 0.95), 1, null, true);
-    hits.push({ type: "room", id, poly: corners });
-  }
-
-  let labels = [];
-  function label(...args) { labels.push(args); } // drawn last so rooms in front never cover them
-  function drawLabel(text, gx, gy, color, scale = 1, sub = null, onWall = false) {
-    const [x, y] = onWall ? toScreen(gx, gy, WALL + 12) : toScreen(gx, gy);
-    ctx.font = `600 ${Math.max(9, 12 * view.z * scale)}px "Chakra Petch", sans-serif`;
-    const tw = ctx.measureText(text).width, fh = Math.max(9, 12 * view.z * scale);
-    ctx.fillStyle = "rgba(8,12,9,0.72)";
-    roundRect(x - tw / 2 - 6, y - fh - 2, tw + 12, fh + 8, 3); ctx.fill();
-    ctx.font = `600 ${Math.max(9, 12 * view.z * scale)}px "Chakra Petch", sans-serif`;
-    ctx.textAlign = "center"; ctx.fillStyle = color;
-    ctx.fillText(text, x, y);
-    if (sub) {
-      ctx.font = `500 ${Math.max(8, 10 * view.z * scale)}px "IBM Plex Mono", monospace`;
-      ctx.fillStyle = mix(C.amber, 0.8); ctx.fillText(sub, x, y + 14 * view.z);
-    }
-  }
-
-  function screen(gx, gy, h, glow) { // a little monitor on a desk
-    const p = box(gx, gy, 0.6, 0.12, h + 16, "#0E1410", "#0B100C", "#0D130F");
-    if (glow) { poly(p, glow, null); }
-  }
-
-  function prop(kind, room, gx, gy, w, d, now) {
-    const blink = reduced ? 1 : 0.6 + 0.4 * Math.sin(now / 300);
-    const lead = (data.agents.find((a) => a.room === room) || {});
-    const active = ["working", "thinking"].includes(lead.state);
-    switch (kind) {
-      case "desk":
-        box(gx + 2, gy + 1, 1.6, 0.8, 14, "#1A241C", "#121A14", "#151E17");
-        screen(gx + 2.4, gy + 1, 14, active ? mix(C.phosphor, 0.35 * blink + 0.2) : mix(C.phosphor, 0.08));
-        break;
-      case "radar": {
-        const [cx, cy] = toScreen(gx + 1.3, gy + 3.2);
-        ctx.strokeStyle = mix(C.phosphor, 0.35); ctx.lineWidth = 1;
-        [1, 0.66, 0.33].forEach((r) => { ctx.beginPath(); ctx.ellipse(cx, cy, 40 * r * view.z, 20 * r * view.z, 0, 0, Math.PI * 2); ctx.stroke(); });
-        const a = reduced ? 0.7 : (now / 900) % (Math.PI * 2);
-        ctx.strokeStyle = mix(C.phosphor, active ? 0.9 : 0.4); ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * 40 * view.z, cy + Math.sin(a) * 20 * view.z); ctx.stroke();
-        break;
-      }
-      case "board": { // pipeline board on the back wall: one card per new lead
-        const n = Math.min(((lead.pipeline || {}).new) || 0, 12);
-        const p = [toScreen(gx + 1, gy, 14), toScreen(gx + 5, gy, 14), toScreen(gx + 5, gy, WALL - 6), toScreen(gx + 1, gy, WALL - 6)];
-        poly(p, "#1B1A12", mix(C.amber, 0.4));
-        for (let i = 0; i < n; i++) {
-          const col = i % 6, row = Math.floor(i / 6);
-          const [x, y] = toScreen(gx + 1.35 + col * 0.6, gy, WALL - 14 - row * 12);
-          ctx.fillStyle = mix(C.amber, 0.85); ctx.fillRect(x - 5 * view.z, y - 4 * view.z, 9 * view.z, 7 * view.z);
-        }
-        break;
-      }
-      case "table":
-        box(gx + 1.6, gy + 1.6, 2.6, 1.4, 12, "#1C251E", "#121A14", "#161F18");
-        break;
-      case "phone": { // the red phone on the Command Deck rings when something needs Patrick
-        const ringing = data.hud.approvals.length > 0;
-        box(gx + 3.6, gy + 2.1, 0.4, 0.3, 18, ringing ? mix(C.signal, 0.5 + 0.5 * blink) : "#3A1814", "#2A110E", "#331310");
-        if (ringing) {
-          const [x, y] = toScreen(gx + 3.8, gy + 2.2, 34);
-          ctx.strokeStyle = mix(C.signal, 0.8 * blink); ctx.lineWidth = 2;
-          [8, 14].forEach((r) => { ctx.beginPath(); ctx.arc(x, y, r * view.z, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke(); });
-          hits.push({ type: "approvals", poly: [toScreen(gx + 3.4, gy + 1.9), toScreen(gx + 4.2, gy + 1.9), toScreen(gx + 4.2, gy + 2.7), toScreen(gx + 3.4, gy + 2.7)] });
-        }
-        break;
-      }
-      case "screens": // wall of screens behind the Architect
-        for (let i = 0; i < 3; i++) {
-          const p = [toScreen(gx + 1.2 + i * 1.3, gy, 16), toScreen(gx + 2.2 + i * 1.3, gy, 16), toScreen(gx + 2.2 + i * 1.3, gy, 36), toScreen(gx + 1.2 + i * 1.3, gy, 36)];
-          poly(p, mix(C.phosphor, 0.06 + (active ? 0.12 * blink : 0)), mix(C.phosphor, 0.3));
-        }
-        break;
-      case "booth": {
-        box(gx + 0.8, gy + 1.2, 2.4, 0.9, 12, "#16202A", "#101820", "#131C24");
-        // live waveform while C.L.a.i.R talks
-        const [x0, y0] = toScreen(gx + 1, gy, 30), [x1] = toScreen(gx + 3.4, gy, 30);
-        ctx.strokeStyle = mix("#7FB2E5", active ? 0.9 : 0.3); ctx.lineWidth = 1.5; ctx.beginPath();
-        for (let i = 0; i <= 24; i++) {
-          const x = x0 + (x1 - x0) * i / 24, amp = active ? 8 * Math.sin(now / 90 + i * 0.9) * Math.sin(i / 24 * Math.PI) : 1;
-          const y = y0 + (i / 24) * ((toScreen(gx + 3.4, gy, 30)[1]) - y0) + amp * view.z;
-          i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
-        }
-        ctx.stroke();
-        break;
-      }
-      case "lockers":
-        for (let i = 0; i < 5; i++) box(gx + 0.3 + i * 0.7, gy + 0.2, 0.6, 0.4, 34, "#18211B", "#111813", "#141C16");
-        break;
-      case "bench":
-        box(gx + 1, gy + 4, 3, 0.5, 8, "#1A231C", "#121A14", "#151E17");
-        break;
-      case "cabinets":
-        for (let i = 0; i < 3; i++) box(gx + 2.6 + i * 0.7, gy + 0.2, 0.6, 0.5, 28, "#221E16", "#17140F", "#1C1912");
-        break;
-      case "bunk":
-        break; // bunks are drawn with sleeping agents
-      case "terminals": {
-        const code = data.agents.some((a) => a.room === "codebay" && a.state === "working");
-        for (let i = 0; i < 3; i++) {
-          box(gx + 0.6 + i * 1.3, gy + 0.6, 1, 0.6, 12, "#17202A", "#10171E", "#131B22");
-          screen(gx + 0.8 + i * 1.3, gy + 0.6, 12, code ? mix(C.steel, 0.25 + 0.3 * blink) : mix(C.steel, 0.07));
-        }
-        break;
-      }
-      case "racks":
-        for (let i = 0; i < 2; i++) {
-          box(gx + 3.6, gy + 1.6 + i * 1.2, 0.8, 0.9, 40, "#141A1E", "#0E1316", "#11171A");
-        }
-        break;
-      case "gpu": {
-        const util = (data.hud.gpu && data.hud.gpu.util) || 0;
-        for (let i = 0; i < 3; i++) {
-          const top = box(gx + 1 + i * 1.5, gy + 0.6, 1.1, 1, 30, "#1E1512", "#140E0C", "#19110E");
-          const hot = Math.min(1, util / 100 + (data.hud.gpu.training ? 0.4 : 0));
-          poly(top, mix(C.signal, 0.08 + 0.45 * hot * blink), null);
-        }
-        break;
-      }
-    }
-  }
-
-  // ---- agents ---------------------------------------------------------------------------
-  function placeAgents(dt) {
-    const slot = { ready: 0, codebay: 0 };
-    const seen = new Set();
-    const out = data.agents.map((a) => {
-      let target = HOME[a.id];
-      if (a.kind === "splinter") { const s = SLOTS[a.room]; target = s[slot[a.room]++ % s.length]; }
-      if (["working", "thinking"].includes(a.state) && STATION[a.id]) target = STATION[a.id];
-      if (a.state === "asleep" && BUNK[a.id]) target = BUNK[a.id];
-      target = target || [10, 10];
-      seen.add(a.id);
-      let cur = motion[a.id];
-      if (!cur) {  // new splinters walk in from the Ready Room door; everyone else starts in place
-        cur = motion[a.id] = a.kind === "splinter" ? [a.room === "codebay" ? 2.5 : 16, a.room === "codebay" ? 16.8 : 4.8] : [...target];
-      }
-      const dx = target[0] - cur[0], dy = target[1] - cur[1], dist = Math.hypot(dx, dy);
-      const step = reduced ? dist : Math.min(dist, 1.8 * dt);  // tiles per second
-      if (dist > 0.001) { cur[0] += (dx / dist) * step; cur[1] += (dy / dist) * step; }
-      const walking = dist > 0.05;
-      return { ...a, pos: [cur[0], cur[1]], walking, facing: dx >= 0 ? 1 : -1, inBunk: a.state === "asleep" && BUNK[a.id] && !walking };
-    });
-    Object.keys(motion).forEach((id) => { if (!seen.has(id)) delete motion[id]; });
-    return out;
-  }
-
-  function drawAgent(a, now) {
-    const [gx, gy] = a.pos;
-    const [x, y] = toScreen(gx, gy);
-    const z = view.z, sel = selected && selected.type === "agent" && selected.id === a.id;
-    const hov = hover && hover.type === "agent" && hover.id === a.id;
-    const bob = reduced ? 0 : a.walking ? -Math.abs(Math.sin(now / 111 + gx)) * 1.5 : a.state === "idle" ? Math.sin(now / 700 + gx) * 1.2 : 0;
-    const patch = VENDOR[a.vendor] || C.fog;
-
-    // shadow + selection ring
-    ctx.fillStyle = "rgba(0,0,0,0.45)"; ctx.beginPath(); ctx.ellipse(x, y, 15 * z, 7.5 * z, 0, 0, Math.PI * 2); ctx.fill();
-    if (sel || hov) { ctx.strokeStyle = sel ? C.amber : mix(C.paper, 0.6); ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(x, y, 17 * z, 8.5 * z, 0, 0, Math.PI * 2); ctx.stroke(); }
-
-    if (a.inBunk) { // lying in a bunk
-      box(gx - 0.5, gy - 0.25, 1.4, 0.6, 8, "#1E2620", "#141B16", "#18201A");
-      const [hx, hy] = toScreen(gx - 0.25, gy, 12);
-      ctx.fillStyle = "#2A332C"; ctx.beginPath(); ctx.ellipse(hx + 14 * z, hy + 2 * z, 16 * z, 5 * z, -0.45, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "#3A443B"; ctx.beginPath(); ctx.arc(hx, hy, 5 * z, 0, Math.PI * 2); ctx.fill();
-      if (!reduced) {
-        const k = (now / 1400) % 1;
-        ctx.fillStyle = mix(C.paper, 0.7 * (1 - k)); ctx.font = `600 ${11 * z}px "IBM Plex Mono", monospace`;
-        ctx.fillText("z", hx + 8 * z, hy - 10 * z - k * 16 * z);
-      }
-      hits.push({ type: "agent", id: a.id, rect: [hx - 12 * z, hy - 14 * z, 40 * z, 24 * z] });
-      return;
-    }
-
-    if (a.id === "clair") { // C.L.a.i.R: a mint-green flame wisp, as on Patrick's portfolio
-      const fl = reduced ? 0 : Math.sin(now / 160) * 2;
-      const cy = y - 30 * z + bob;
-      const g = ctx.createRadialGradient(x, cy, 2, x, cy, 30 * z);
-      g.addColorStop(0, "rgba(200,255,225,0.95)"); g.addColorStop(0.35, "rgba(120,230,170,0.55)"); g.addColorStop(1, "rgba(120,230,170,0)");
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, cy, 30 * z, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "rgba(170,250,205,0.9)"; ctx.beginPath();
-      ctx.moveTo(x, cy - (20 + fl) * z); ctx.quadraticCurveTo(x + 11 * z, cy - 4 * z, x + 6 * z, cy + 8 * z);
-      ctx.quadraticCurveTo(x, cy + 13 * z, x - 6 * z, cy + 8 * z); ctx.quadraticCurveTo(x - 11 * z, cy - 4 * z, x, cy - (20 + fl) * z); ctx.fill();
-      ctx.fillStyle = patch; ctx.fillRect(x + 12 * z, cy + 6 * z, 5 * z, 5 * z);
-      stateMark(a, x, cy - 30 * z, now);
-      hits.push({ type: "agent", id: a.id, rect: [x - 18 * z, cy - 30 * z, 36 * z, 50 * z] });
-      nameTag(a, x, y + 14 * z, sel || hov);
-      return;
-    }
-
-    const by = y + bob * z;
-    drawFigure(a, x, by, now);
-    const tall = (a.kind === "commander" ? 1.08 : 1) * FIG;
-    stateMark(a, x, by - 54 * z * tall, now);
-    hits.push({ type: "agent", id: a.id, rect: [x - 14 * z, by - 50 * z * tall, 28 * z, 52 * z * tall] });
-    nameTag(a, x, y + 14 * z, sel || hov || a.kind === "commander");
-  }
-
-  // People are drawn in local units (origin at their feet, 1 unit = 1px at zoom 1), facing right.
-  const FIG = 1.3;  // figure scale relative to the tiles
-  const LOOK = {
-    commander: { coat: "#26352A", trim: C.phosphor, skin: "#C9B8A3", hair: "#2A2A26", legs: "#141A16", boots: "#0B0F0C", long: true },
-    sleeper:   { coat: "#2A3530", trim: C.fog,      skin: "#BFA48C", hair: "#1E2620", legs: "#1A201C", boots: "#0E120F", hood: true },
-    splinter:  { coat: "#20282B", trim: C.steel,    skin: "#B49C86", hair: "#151B1E", legs: "#161C1F", boots: "#0A0D0F", visor: true },
-    forge:     { coat: "#3A2A22", trim: C.signal,   skin: "#C7A88E", hair: "#2B211B", legs: "#1A1513", boots: "#0E0B0A", apron: true },
-  };
-  function drawFigure(a, x, y, now) {
-    const L = LOOK[a.kind] || LOOK.sleeper, z = view.z, t = now / 1000;
-    const walk = a.walking && !reduced ? Math.sin(t * 9 + a.pos[0]) : 0;
-    const typing = a.state === "working" && !a.walking && !reduced;
-    const tall = (a.kind === "commander" ? 1.08 : 1) * FIG;
-    ctx.save();
-    ctx.translate(x, y); ctx.scale(a.facing * z * tall, z * tall);
-    // legs and boots (alternate when walking)
-    [[-4, walk], [1, -walk]].forEach(([lx, ph]) => {
-      ctx.fillStyle = L.legs; ctx.fillRect(lx, -14 - Math.max(0, ph) * 2, 4, 13 + Math.max(0, ph) * 2 - Math.max(0, ph) * 2);
-      ctx.fillStyle = L.boots; ctx.fillRect(lx - 0.5 + ph * 1.5, -2 - Math.max(0, ph) * 2, 5.5, 3);
-    });
-    // torso: shoulders wider than the waist
-    ctx.fillStyle = L.coat; ctx.beginPath();
-    ctx.moveTo(-9, -32); ctx.lineTo(9, -32); ctx.lineTo(7, L.long ? -6 : -13); ctx.lineTo(-7, L.long ? -6 : -13); ctx.closePath(); ctx.fill();
-    if (L.long) { ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0.5, -24); ctx.lineTo(0.5, -6); ctx.stroke(); }
-    if (L.apron) { ctx.fillStyle = "#5A4232"; ctx.fillRect(-5.5, -27, 11, 15); ctx.fillStyle = mix(C.signal, 0.25); ctx.fillRect(-5.5, -27, 11, 1.5); }
-    if (L.visor) {  // tactical vest with pouches
-      ctx.fillStyle = "#2C373B"; ctx.fillRect(-6.5, -29, 13, 13);
-      ctx.fillStyle = "#1A2124"; [-5, -0.5, 4].forEach((px) => ctx.fillRect(px, -21, 3, 4));
-    }
-    if (L.hood) { ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-5, -19); ctx.lineTo(5, -19); ctx.stroke(); }
-    // collar light strip (rank / role color)
-    ctx.fillStyle = mix(L.trim, a.kind === "commander" ? 0.9 : 0.5); ctx.fillRect(-4, -32, 8, 1.6);
-    // arms: swing when walking, forward and tapping when working
-    ctx.fillStyle = L.coat;
-    if (typing) {
-      const tap = Math.sin(t * 22) * 1.2;
-      ctx.save(); ctx.translate(8, -30); ctx.rotate(-0.9); ctx.fillRect(0, -1.5, 3.2, 12); ctx.restore();
-      ctx.save(); ctx.translate(-8, -30); ctx.rotate(-0.6); ctx.fillRect(0, -1.5, 3.2, 12); ctx.restore();
-      ctx.fillStyle = L.skin; ctx.fillRect(15, -24 + tap, 2.6, 2.6); ctx.fillRect(4, -21 - tap, 2.6, 2.6);
-    } else {
-      [[-11.5, walk], [8.5, -walk]].forEach(([ax, ph]) => {
-        ctx.save(); ctx.translate(ax + 1.5, -31); ctx.rotate(ph * 0.35); ctx.fillStyle = L.coat; ctx.fillRect(-1.5, 0, 3.2, 14);
-        ctx.fillStyle = L.skin; ctx.fillRect(-1.3, 13.5, 2.8, 2.6); ctx.restore();
-      });
-    }
-    // vendor patch on the shoulder
-    ctx.fillStyle = VENDOR[a.vendor] || C.fog; ctx.fillRect(-9, -31, 4, 4);
-    // head
-    if (L.hood) { ctx.fillStyle = L.coat; ctx.beginPath(); ctx.arc(0, -38, 8.6, Math.PI * 0.95, Math.PI * 2.05); ctx.fill(); }
-    ctx.fillStyle = L.skin; ctx.beginPath(); ctx.arc(1, -38, 6, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = L.hair; ctx.beginPath(); ctx.arc(1, -39.5, 6.2, Math.PI * 1.02, Math.PI * 1.98); ctx.fill();
-    if (L.visor) {  // helmet and a single glowing visor band
-      ctx.fillStyle = "#1B2326"; ctx.beginPath(); ctx.arc(1, -39.5, 7, Math.PI, Math.PI * 2); ctx.fill();
-      const glow = a.state === "working" ? 0.95 : 0.55;
-      ctx.fillStyle = mix(C.phosphor, glow); ctx.fillRect(-2, -39.5, 9.5, 2.4);
-      if (a.state === "working") { ctx.fillStyle = mix(C.phosphor, 0.18); ctx.fillRect(-3, -42, 12, 7); }
-    }
-    if (L.apron) {  // goggles pushed up on the forehead
-      ctx.fillStyle = "#2B211B"; ctx.fillRect(-5, -43.5, 12, 2);
-      ctx.fillStyle = mix(C.signal, 0.8); ctx.beginPath(); ctx.arc(-1, -42.5, 2, 0, Math.PI * 2); ctx.arc(4.5, -42.5, 2, 0, Math.PI * 2); ctx.fill();
-    }
-    if (a.kind === "commander") {  // earpiece and mic boom
-      ctx.fillStyle = "#121714"; ctx.fillRect(5.5, -40, 2.6, 4.5);
-      ctx.strokeStyle = "#121714"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(7, -36); ctx.lineTo(4, -33.5); ctx.stroke();
-      ctx.fillStyle = mix(C.phosphor, 0.9); ctx.fillRect(7, -39, 1.2, 1.2);
-    }
-    ctx.restore();
-  }
-
-  function stateMark(a, x, y, now) {
-    const z = view.z;
-    if (a.state === "thinking") {
-      const r = reduced ? 6 : 5 + 2 * Math.sin(now / 250);
-      ctx.strokeStyle = mix(C.phosphor, 0.85); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, r * z, 0, Math.PI * 2); ctx.stroke();
-    } else if (a.state === "blocked") {
-      const on = reduced || Math.floor(now / 450) % 2 === 0;
-      ctx.fillStyle = on ? C.signal : mix(C.signal, 0.3); ctx.beginPath(); ctx.arc(x, y, 4.5 * z, 0, Math.PI * 2); ctx.fill();
-      if (on) { const g = ctx.createRadialGradient(x, y, 1, x, y, 16 * z); g.addColorStop(0, mix(C.signal, 0.5)); g.addColorStop(1, mix(C.signal, 0)); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 16 * z, 0, Math.PI * 2); ctx.fill(); }
-    }
-  }
-
-  function nameTag(a, x, y, show) {
-    if (!show) return;
-    ctx.font = `600 ${Math.max(9, 11 * view.z)}px "Chakra Petch", sans-serif`;
-    const w = ctx.measureText(a.name).width + 10;
-    ctx.fillStyle = "rgba(7,10,8,0.85)"; ctx.fillRect(x - w / 2, y - 2, w, 16 * Math.max(1, view.z * 0.9));
-    ctx.fillStyle = C.paper; ctx.textAlign = "center"; ctx.fillText(a.name, x, y + 10 * Math.max(1, view.z * 0.9));
-  }
-
+  function mix(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; }
   function roundRect(x, y, w, h, r) {
     ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
     ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
   }
+  // world pixels -> screen pixels
+  const toScreen = (px, py) => [px * view.z + view.x, py * view.z + view.y];
 
-  // ---- frame ----------------------------------------------------------------------------
+  function fit() {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    const z = Math.min((w - 24) / (MAP_W * T), (h - 16) / (MAP_H * T));
+    view.z = z;
+    view.x = Math.round((w - MAP_W * T * view.z) / 2);
+    view.y = Math.round((h - MAP_H * T * view.z) / 2 + 6);
+  }
+
+  // ---- static layer: floors, walls, furniture (redrawn only when art loads) ------------------------
+  function sprite(g, name, x, y, flip = false) {
+    const s = S[name]; if (!s) return;
+    const [sh, sx, sy, sw, shh] = s;
+    if (artReady) {
+      if (flip) { g.save(); g.translate(Math.round(x) + sw, Math.round(y)); g.scale(-1, 1); g.drawImage(img[sh], sx, sy, sw, shh, 0, 0, sw, shh); g.restore(); }
+      else g.drawImage(img[sh], sx, sy, sw, shh, Math.round(x), Math.round(y), sw, shh);
+    } else {  // stand-in block until the art pack is installed
+      g.fillStyle = "#2B2547"; g.fillRect(Math.round(x), Math.round(y), sw, shh);
+      g.strokeStyle = C.ink; g.strokeRect(Math.round(x) + 0.5, Math.round(y) + 0.5, sw - 1, shh - 1);
+    }
+  }
+  function fillFloor(g, kind, x, y, w, h) {
+    const f = FLOOR[kind];
+    if (!artReady || !f) { g.fillStyle = "#231E3B"; g.fillRect(x, y, w, h); return; }
+    const [fx, fy, n] = f;
+    for (let yy = y; yy < y + h; yy += n) for (let xx = x; xx < x + w; xx += n) {
+      g.drawImage(img.A, fx, fy, Math.min(n, x + w - xx), Math.min(n, y + h - yy), xx, yy, Math.min(n, x + w - xx), Math.min(n, y + h - yy));
+    }
+  }
+  function wallFace(g, style, x, y, w) {
+    const f = WALLFACE[style];
+    if (!artReady || !f) { g.fillStyle = "#3A3366"; g.fillRect(x, y, w, FACE * T); return; }
+    for (let xx = x; xx < x + w; xx += 48) g.drawImage(img.A, f[0], f[1], Math.min(48, x + w - xx), 48, xx, y, Math.min(48, x + w - xx), 48);
+  }
+  function wallTop(g, x, y, w, h) {
+    g.fillStyle = C.walltop; g.fillRect(x, y, w, h);
+    g.fillStyle = C.walledge; g.fillRect(x, y, w, 1); g.fillRect(x, y, 1, h);
+    g.fillStyle = C.ink; g.fillRect(x, y + h - 1, w, 1); g.fillRect(x + w - 1, y, 1, h);
+  }
+  function hazard(g, x, y, w, h) {
+    g.fillStyle = "#2A1E0C"; g.fillRect(x, y, w, h);
+    g.save(); g.beginPath(); g.rect(x, y, w, h); g.clip();
+    g.strokeStyle = "#C98A2E"; g.lineWidth = 3;
+    for (let k = -h; k < w + h; k += 8) { g.beginPath(); g.moveTo(x + k, y + h); g.lineTo(x + k + h, y); g.stroke(); }
+    g.restore();
+    g.strokeStyle = C.ink; g.lineWidth = 1; g.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  }
+  function buildStatic() {
+    const g = staticLayer.getContext("2d");
+    g.imageSmoothingEnabled = false;
+    g.fillStyle = C.night; g.fillRect(0, 0, MAP_W * T, MAP_H * T);
+    // corridors: dark plating
+    CORRIDORS.forEach(([x, y, w, h]) => {
+      fillFloor(g, "checkNavy", x * T, y * T, w * T, h * T);
+      g.fillStyle = "rgba(8,6,20,0.45)"; g.fillRect(x * T, y * T, w * T, h * T);
+    });
+    Object.entries(ROOM).forEach(([id, R]) => {
+      const [x, y, w, h] = R.r.map((v) => v * T);
+      if (R.sealed) {
+        g.fillStyle = "#0B0A14"; g.fillRect(x, y, w, h);
+        wallTop(g, x, y, w, T); wallTop(g, x, y, T, h); wallTop(g, x + w - T, y, T, h); wallTop(g, x, y + h - T, w, T);
+        g.fillStyle = "#15122A"; g.fillRect(x + T, y + T, w - 2 * T, FACE * T);
+        hazard(g, x + w / 2 - 20, y + T + 6, 40, FACE * T - 6);       // closed blast door
+        return;
+      }
+      const fl = inner(id);
+      fillFloor(g, R.floor, fl.x * T, fl.y * T, fl.w * T, fl.h * T);
+      wallFace(g, R.wall, x + T, y + T, w - 2 * T);
+      g.fillStyle = "rgba(0,0,0,0.25)"; g.fillRect(x + T, y + T + FACE * T, w - 2 * T, 4);          // shadow under the face
+      wallTop(g, x, y, w, T); wallTop(g, x, y, T, h); wallTop(g, x + w - T, y, T, h); wallTop(g, x, y + h - T, w, T);
+      const [side, off] = R.door;
+      if (side === "s") {  // opening in the bottom wall
+        fillFloor(g, R.floor, x + off * T, y + h - T, 2 * T, T);
+      } else {              // opening through the top wall and its face
+        fillFloor(g, R.floor, x + off * T, y, 2 * T, (1 + FACE) * T);
+        g.fillStyle = "rgba(0,0,0,0.35)"; g.fillRect(x + off * T, y, 2 * T, (1 + FACE) * T);
+      }
+      (PROPS[id] || []).forEach(([name, tx, ty]) => sprite(g, name, (fl.x + tx) * T, (fl.y + ty) * T));
+    });
+    // beds: the pack has none, so these are drawn here in its style until the AI art lands
+    Object.values(SPOT).forEach((sp) => { if (sp.bunk) bed(g, (inner(sp.room).x + sp.bunk[0] - 0.6) * T, (inner(sp.room).y + sp.bunk[1] - 1.4) * T); });
+  }
+  function bed(g, x, y) {
+    x = Math.round(x); y = Math.round(y);
+    g.fillStyle = C.ink; g.fillRect(x, y, 22, 30);
+    g.fillStyle = "#4A4270"; g.fillRect(x + 1, y + 1, 20, 28);
+    g.fillStyle = "#D7DCEF"; g.fillRect(x + 3, y + 2, 16, 6);         // pillow
+    g.fillStyle = "#2F3A5E"; g.fillRect(x + 1, y + 11, 20, 18);       // blanket
+    g.fillStyle = "#3D4A74"; g.fillRect(x + 1, y + 11, 20, 2);
+  }
+
+  // ---- people (drawn in the pack's style: dark outline, chunky heads) --------------------------
+  const LOOK = {
+    commander: { coat: "#2C4A3A", coat2: "#1F3529", skin: "#E0B894", hair: "#2A2426", pants: "#1B1B2E", accent: C.phosphor, long: true },
+    sleeper:   { coat: "#3B3F66", coat2: "#2B2E4E", skin: "#D6A47E", hair: "#3A2A22", pants: "#22223A", accent: "#9BA3D9", hood: true },
+    splinter:  { coat: "#283238", coat2: "#1B2328", skin: "#C9967A", hair: "#151A1E", pants: "#1A2024", accent: C.phosphor, visor: true },
+    forge:     { coat: "#5A3A2A", coat2: "#3F281D", skin: "#E3B08C", hair: "#2B1E18", pants: "#2A1E1A", accent: C.signal, goggles: true },
+  };
+  const spriteCache = {};
+  // One 16x24 frame; pose: idle | walk0..3 | work0..1
+  function person(kind, pose) {
+    const key = kind + pose;
+    if (spriteCache[key]) return spriteCache[key];
+    const L = LOOK[kind] || LOOK.sleeper, c = document.createElement("canvas"); c.width = 16; c.height = 24;
+    const g = c.getContext("2d");
+    const px = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+    const step = pose.startsWith("walk") ? [0, 1, 0, -1][+pose.slice(4)] : 0;
+    const work = pose.startsWith("work") ? +pose.slice(4) : -1;
+    // outline pass: draw everything 1px bigger in ink first
+    const body = (o) => {
+      // legs
+      px(5 - o, 17 - o, 3 + 2 * o, 5 + 2 * o - Math.max(0, step), o ? C.ink : L.pants);
+      px(9 - o, 17 - o, 3 + 2 * o, 5 + 2 * o - Math.max(0, -step), o ? C.ink : L.pants);
+      // torso / coat
+      px(4 - o, 10 - o, 9 + 2 * o, (L.long ? 10 : 8) + 2 * o, o ? C.ink : L.coat);
+      // arms
+      if (work >= 0) { px(12 - o, 11 - o, 3 + 2 * o, 3 + 2 * o, o ? C.ink : L.coat2); px(2 - o, 11 - o, 3 + 2 * o, 3 + 2 * o, o ? C.ink : L.coat2); }
+      else { px(2 - o, 10 - o + step, 2 + 2 * o, 7 + 2 * o, o ? C.ink : L.coat2); px(13 - o, 10 - o - step, 2 + 2 * o, 7 + 2 * o, o ? C.ink : L.coat2); }
+      // head (big, Streets-of-Rogue chunky)
+      px(4 - o, 1 - o, 9 + 2 * o, 9 + 2 * o, o ? C.ink : L.skin);
+    };
+    body(1); body(0);
+    // boots
+    px(5, 21 - Math.max(0, step), 3, 1, C.ink); px(9, 21 - Math.max(0, -step), 3, 1, C.ink);
+    // coat details
+    px(4, 16, 9, 1, L.coat2); px(8, 10, 1, L.long ? 10 : 8, L.coat2);
+    if (L.long) px(4, 18, 9, 2, L.coat);
+    px(6, 10, 5, 1, L.accent);                                   // collar light
+    // hands
+    if (work >= 0) { px(13 + work, 13, 2, 1, L.skin); px(2 - work + 1, 13, 2, 1, L.skin); }
+    else { px(2, 16 + step, 2, 1, L.skin); px(13, 16 - step, 2, 1, L.skin); }
+    // hair / hood / helmet
+    if (L.hood) { px(3, 0, 11, 4, L.coat); px(3, 0, 2, 9, L.coat); px(12, 0, 2, 9, L.coat); px(4, 1, 9, 2, L.coat2); }
+    else px(4, 1, 9, 3, L.hair);
+    if (L.visor) { px(3, 0, 11, 4, "#20282C"); px(4, 4, 9, 2, L.accent); }
+    else { px(6, 5, 1, 2, C.ink); px(10, 5, 1, 2, C.ink); }      // eyes
+    if (L.goggles) { px(4, 2, 9, 1, "#2B1E18"); px(5, 1, 3, 2, L.accent); px(9, 1, 3, 2, L.accent); }
+    if (L.long) { px(12, 4, 1, 3, C.ink); px(11, 7, 2, 1, C.ink); }  // earpiece and mic
+    spriteCache[key] = c;
+    return c;
+  }
+
+  function placeAgents(dt) {
+    const slot = { ready: 0, codebay: 0 }, seen = new Set();
+    const out = data.agents.map((a) => {
+      const sp = SPOT[a.id];
+      const room = a.room in ROOM ? a.room : (sp ? sp.room : "ready");
+      const fl = inner(room);
+      let rel = sp ? sp.home : null;
+      if (a.kind === "splinter") { const s = SLOTS[room] || SLOTS.ready, i = slot[room] || 0; slot[room] = i + 1; rel = s[i % s.length]; }
+      if (sp && ["working", "thinking"].includes(a.state)) rel = sp.station;
+      if (sp && sp.bunk && a.state === "asleep") rel = sp.bunk;
+      const target = [fl.x + (rel ? rel[0] : 3), fl.y + (rel ? rel[1] : 2)];
+      seen.add(a.id);
+      let cur = motion[a.id];
+      if (!cur) {  // new Splinters walk in through their room's door
+        const R = ROOM[room];
+        cur = motion[a.id] = a.kind === "splinter" && R && R.door ? [R.r[0] + R.door[1] + 1, R.door[0] === "s" ? R.r[1] + R.r[3] : R.r[1] + 1 + FACE] : [...target];
+      }
+      const dx = target[0] - cur[0], dy = target[1] - cur[1], dist = Math.hypot(dx, dy);
+      const step = reduced ? dist : Math.min(dist, 2.6 * dt);
+      if (dist > 0.001) { cur[0] += (dx / dist) * step; cur[1] += (dy / dist) * step; }
+      const walking = dist > 0.05;
+      const prev = a.id in facingMem ? facingMem[a.id] : 1;
+      const facing = Math.abs(dx) > 0.05 ? (dx > 0 ? 1 : -1) : prev; facingMem[a.id] = facing;
+      return { ...a, pos: [cur[0], cur[1]], walking, facing, inBunk: sp && sp.bunk && a.state === "asleep" && !walking };
+    });
+    Object.keys(motion).forEach((id) => { if (!seen.has(id)) delete motion[id]; });
+    return out;
+  }
+  const facingMem = {};
+
+  function drawAgent(g, a, now) {
+    const x = Math.round(a.pos[0] * T), y = Math.round(a.pos[1] * T);   // feet
+    if (a.inBunk) {  // asleep under the blanket
+      g.fillStyle = C.ink; g.fillRect(x - 6, y - 21, 11, 10);
+      g.fillStyle = (LOOK[a.kind] || LOOK.sleeper).skin; g.fillRect(x - 5, y - 20, 9, 8);
+      g.fillStyle = (LOOK[a.kind] || LOOK.sleeper).coat; g.fillRect(x - 5, y - 20, 9, 3);
+      return { x: x - 8, y: y - 24, w: 18, h: 26 };
+    }
+    g.fillStyle = "rgba(0,0,0,0.45)"; g.fillRect(x - 6, y - 1, 12, 3);
+    if (a.id === "clair") {  // C.L.a.i.R: a mint flame wisp
+      const t = now / 1000, bob = reduced ? 0 : Math.round(Math.sin(t * 2.4) * 1.5), cy = y - 16 + bob;
+      const fl = reduced ? 0 : Math.round(Math.sin(t * 9) * 1);
+      g.fillStyle = "#1E6B4A"; g.fillRect(x - 5, cy - 2, 11, 10); g.fillRect(x - 3, cy - 6 - fl, 7, 4); g.fillRect(x - 1, cy - 9 - fl, 3, 3);
+      g.fillStyle = "#7CF0B4"; g.fillRect(x - 4, cy - 1, 9, 8); g.fillRect(x - 2, cy - 5 - fl, 5, 4); g.fillRect(x, cy - 8 - fl, 1, 3);
+      g.fillStyle = "#D8FFEA"; g.fillRect(x - 2, cy + 1, 5, 4);
+      g.fillStyle = C.ink; g.fillRect(x - 2, cy + 2, 1, 2); g.fillRect(x + 2, cy + 2, 1, 2);
+      g.fillStyle = VENDOR[a.vendor] || C.fog; g.fillRect(x + 6, cy + 6, 2, 2);
+      return { x: x - 8, y: cy - 12, w: 17, h: 24 };
+    }
+    const t = now / 1000;
+    let pose = "idle";
+    if (a.walking) pose = "walk" + (reduced ? 0 : Math.floor(t * 8) % 4);
+    else if (a.state === "working" || a.state === "thinking") pose = "work" + (reduced ? 0 : Math.floor(t * 6) % 2);
+    const spr = person(a.kind, pose);
+    const breathe = !reduced && pose === "idle" && Math.floor(t * 1.5) % 2 ? 1 : 0;
+    g.save();
+    if (a.facing < 0) { g.translate(x, 0); g.scale(-1, 1); g.drawImage(spr, -8, y - 23 + breathe); }
+    else g.drawImage(spr, x - 8, y - 23 + breathe);
+    g.restore();
+    g.fillStyle = VENDOR[a.vendor] || C.fog; g.fillRect(x + (a.facing < 0 ? 3 : -6), y - 12, 2, 2);   // vendor patch
+    return { x: x - 8, y: y - 24, w: 16, h: 25 };
+  }
+
+  // ---- lights -----------------------------------------------------------------------------------
+  function lights(now) {
+    const out = [], g = data.hud.gpu || {};
+    const pulse = (p) => (reduced ? 1 : 0.85 + 0.15 * Math.sin(now / p));
+    Object.entries(ROOM).forEach(([id, R]) => {
+      if (R.sealed) return;
+      const fl = inner(id), here = data.agents.filter((a) => a.room === id);
+      const busy = here.some((a) => ["working", "thinking"].includes(a.state));
+      const alert = here.some((a) => a.state === "blocked");
+      const asleep = here.length && here.every((a) => a.state === "asleep");
+      const cx = (fl.x + fl.w / 2) * T, cy = (fl.y + fl.h / 2 - 0.5) * T;
+      out.push({ x: cx, y: cy, r: Math.max(fl.w, fl.h) * T * (busy ? 0.75 : 0.6), a: asleep ? 0.35 : busy ? 0.95 : 0.7, color: R.tint, tint: busy ? 0.1 : 0.05 });
+      if (alert) out.push({ x: cx, y: cy, r: fl.w * T * 0.6, a: 0, color: C.signal, tint: reduced ? 0.22 : 0.12 + 0.12 * Math.sin(now / 260) });
+      (PROPS[id] || []).forEach(([name, tx, ty]) => {
+        const glow = S[name] && S[name][5] && S[name][5].glow;
+        if (glow) out.push({ x: (fl.x + tx) * T + glow[0], y: (fl.y + ty) * T + glow[1], r: 26, a: 0.55 * (busy ? 1 : 0.7) * pulse(500 + tx * 60), color: glow[2], tint: 0.18 });
+      });
+    });
+    // the Forge glows with real GPU load
+    const heat = Math.max((g.util || 0) / 100, g.training ? 0.8 : 0);
+    const ff = inner("forge");
+    if (heat > 0.05) out.push({ x: (ff.x + 5) * T, y: (ff.y - 0.5) * T, r: 110, a: 0.6 * heat, color: C.signal, tint: 0.3 * heat * pulse(300) });
+    // sealed doors: a little amber status light
+    Object.values(ROOM).forEach((R) => { if (R.sealed) out.push({ x: (R.r[0] + R.r[2] / 2) * T, y: (R.r[1] + 2.5) * T, r: 44, a: 0.55, color: C.amber, tint: 0.16 * pulse(700) }); });
+    // corridor strip lights
+    CORRIDORS.forEach(([x, y, w, h]) => { for (let k = 3; k < w; k += 6) out.push({ x: (x + k) * T, y: (y + h / 2) * T, r: 40, a: 0.5, color: "#7FB2E5", tint: 0.05 }); });
+    return out;
+  }
+  function drawLighting(placed, now) {
+    const W = MAP_W * T, H = MAP_H * T;
+    lctx.globalCompositeOperation = "source-over";
+    lctx.fillStyle = "rgba(6,5,16,0.8)"; lctx.fillRect(0, 0, W, H);
+    lctx.globalCompositeOperation = "destination-out";
+    const ls = lights(now);
+    placed.forEach((a) => { if (a.id === "clair") ls.push({ x: a.pos[0] * T, y: a.pos[1] * T - 14, r: 40, a: 0.8, color: "#7CF0B4", tint: 0.25 }); });
+    ls.forEach((L) => {
+      if (!L.a) return;
+      const gr = lctx.createRadialGradient(L.x, L.y, 2, L.x, L.y, L.r);
+      gr.addColorStop(0, `rgba(0,0,0,${L.a})`); gr.addColorStop(1, "rgba(0,0,0,0)");
+      lctx.fillStyle = gr; lctx.fillRect(L.x - L.r, L.y - L.r, 2 * L.r, 2 * L.r);
+    });
+    wctx.drawImage(light, 0, 0);
+    // coloured bloom on top
+    wctx.globalCompositeOperation = "lighter";
+    ls.forEach((L) => {
+      if (!L.tint) return;
+      const gr = wctx.createRadialGradient(L.x, L.y, 1, L.x, L.y, L.r);
+      gr.addColorStop(0, mix(L.color, L.tint)); gr.addColorStop(1, mix(L.color, 0));
+      wctx.fillStyle = gr; wctx.fillRect(L.x - L.r, L.y - L.r, 2 * L.r, 2 * L.r);
+    });
+    wctx.globalCompositeOperation = "source-over";
+  }
+
+  // ---- marks drawn in screen space (crisp at any zoom) ----------------------------------------------
+  function stateMark(a, sx, sy, now) {
+    const z = view.z;
+    if (a.state === "thinking") {
+      const k = reduced ? 0 : Math.floor(now / 300) % 3;
+      for (let i = 0; i < 3; i++) { ctx.fillStyle = i === k ? C.phosphor : mix(C.phosphor, 0.35); ctx.fillRect(sx - 7 * z + i * 5 * z, sy, 3 * z, 3 * z); }
+    } else if (a.state === "blocked") {
+      const on = reduced || Math.floor(now / 450) % 2 === 0;
+      ctx.fillStyle = on ? C.signal : mix(C.signal, 0.3); ctx.fillRect(sx - 2 * z, sy - 4 * z, 4 * z, 6 * z); ctx.fillRect(sx - 2 * z, sy + 3 * z, 4 * z, 2 * z);
+    } else if (a.state === "asleep" && !reduced) {
+      const k = (now / 1400) % 1;
+      ctx.fillStyle = mix(C.paper, 0.8 * (1 - k)); ctx.font = `600 ${Math.round(8 * z)}px "IBM Plex Mono", monospace`;
+      ctx.textAlign = "left"; ctx.fillText("z", sx + 4 * z, sy - k * 10 * z);
+    }
+  }
+  function nameTag(text, sx, sy, color = C.paper) {
+    ctx.font = `600 ${Math.max(10, Math.round(4.5 * view.z))}px "Chakra Petch", sans-serif`;
+    const w = ctx.measureText(text).width + 10, h = Math.max(15, Math.round(6.5 * view.z));
+    ctx.fillStyle = "rgba(7,6,14,0.85)"; ctx.fillRect(sx - w / 2, sy, w, h);
+    ctx.fillStyle = color; ctx.textAlign = "center"; ctx.fillText(text, sx, sy + h - Math.round(h * 0.28));
+  }
+
+  // ---- frame ----------------------------------------------------------------------------------------
   function frame(now) {
     raf = requestAnimationFrame(frame);
     if (!data || document.hidden) return;
+    const W = MAP_W * T, H = MAP_H * T;
+    if (!world) {
+      world = document.createElement("canvas"); world.width = W; world.height = H; wctx = world.getContext("2d");
+      light = document.createElement("canvas"); light.width = W; light.height = H; lctx = light.getContext("2d");
+    }
+    if (!staticLayer) { staticLayer = document.createElement("canvas"); staticLayer.width = W; staticLayer.height = H; buildStatic(); }
+    const dt = lastFrame ? Math.min(0.1, (now - lastFrame) / 1000) : 0; lastFrame = now;
+    hits = [];
+    wctx.imageSmoothingEnabled = false;
+    wctx.drawImage(staticLayer, 0, 0);
+    // red phone on the Command Deck table: rings when something needs Patrick
+    const cf = inner("command"), ringing = data.hud.approvals.length > 0;
+    const phone = [(cf.x + 9.2) * T, (cf.y + 1.3) * T];
+    const blink = reduced ? 1 : Math.floor(now / 250) % 2;
+    wctx.fillStyle = C.ink; wctx.fillRect(phone[0] - 1, phone[1] - 1, 9, 7);
+    wctx.fillStyle = ringing && blink ? "#FF5A47" : "#8E2A22"; wctx.fillRect(phone[0], phone[1], 7, 5);
+    wctx.fillStyle = "#3A0F0B"; wctx.fillRect(phone[0] + 1, phone[1] + 1, 5, 1);
+    const placed = placeAgents(dt);
+    const boxes = {};
+    placed.sort((a, b) => a.pos[1] - b.pos[1]).forEach((a) => { boxes[a.id] = drawAgent(wctx, a, now); });
+    drawSparks(dt);
+    drawLighting(placed, now);
+    if (data.hud.halted) { wctx.fillStyle = "rgba(255,77,61,0.07)"; wctx.fillRect(0, 0, W, H); }
+
+    // blit the world, pixel-sharp
     const w = canvas.clientWidth, h = canvas.clientHeight;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const bg = ctx.createRadialGradient(w / 2, h * 0.35, 40, w / 2, h / 2, Math.max(w, h));
-    bg.addColorStop(0, "#132018"); bg.addColorStop(1, C.night);
-    ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
-    hits = []; labels = [];
-    const dt = lastFrame ? Math.min(0.1, (now - lastFrame) / 1000) : 0; lastFrame = now;
-    // rooms back-to-front (by gx + gy), then agents back-to-front
-    Object.keys(LAYOUT).sort((a, b) => (LAYOUT[a].r[0] + LAYOUT[a].r[1]) - (LAYOUT[b].r[0] + LAYOUT[b].r[1])).forEach((id) => drawRoom(id, now));
-    const placed = placeAgents(dt);
-    placed.sort((a, b) => (a.pos[0] + a.pos[1]) - (b.pos[0] + b.pos[1])).forEach((a) => drawAgent(a, now));
-    drawSparks(dt);
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = C.night; ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(world, view.x, view.y, W * view.z, H * view.z);
+
+    // hit areas, labels and marks in screen space
+    Object.entries(ROOM).forEach(([id, R]) => {
+      const [x, y, rw, rh] = R.r.map((v) => v * T);
+      const [sx, sy] = toScreen(x, y), sw = rw * view.z, sh = rh * view.z;
+      hits.push({ type: "room", id, poly: [[sx, sy], [sx + sw, sy], [sx + sw, sy + sh], [sx, sy + sh]] });
+      const isSel = selected && selected.type === "room" && selected.id === id, isHov = hover && hover.type === "room" && hover.id === id;
+      if (isSel || isHov) { ctx.strokeStyle = isSel ? C.amber : mix(C.paper, 0.5); ctx.lineWidth = 2; ctx.strokeRect(sx + 1, sy + 1, sw - 2, sh - 2); }
+      const name = (data.rooms.find((r) => r.id === id) || { name: id }).name;
+      nameTag(R.sealed ? `${name} · sealed` : name, sx + sw / 2, sy - Math.max(8, 3 * view.z), R.sealed ? C.amber : R.tint);
+    });
+    if (ringing) { const [px, py] = toScreen(phone[0] - 6, phone[1] - 6); hits.push({ type: "approvals", rect: [px, py, 20 * view.z, 18 * view.z] }); }
+    placed.forEach((a) => {
+      const b = boxes[a.id]; if (!b) return;
+      const [sx, sy] = toScreen(b.x, b.y);
+      hits.push({ type: "agent", id: a.id, rect: [sx, sy, b.w * view.z, b.h * view.z] });
+      const sel = selected && selected.type === "agent" && selected.id === a.id, hov = hover && hover.type === "agent" && hover.id === a.id;
+      if (sel) { ctx.strokeStyle = C.amber; ctx.lineWidth = 2; ctx.strokeRect(sx - 2, sy - 2, b.w * view.z + 4, b.h * view.z + 4); }
+      stateMark(a, sx + (b.w * view.z) / 2, sy - 6 * view.z, now);
+      if (sel || hov || a.kind === "commander") nameTag(a.name, sx + (b.w * view.z) / 2, sy + b.h * view.z + 2);
+    });
     drawPings(placed, now);
-    labels.forEach((l) => drawLabel(...l));
-    // vignette and faint scanlines: the ops-center monitor look
-    const v = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.max(w, h) * 0.75);
-    v.addColorStop(0, "rgba(0,0,0,0)"); v.addColorStop(1, "rgba(0,0,0,0.55)");
-    ctx.fillStyle = v; ctx.fillRect(0, 0, w, h);
     ctx.fillStyle = scanlines(); ctx.fillRect(0, 0, w, h);
-    if (data.hud.halted) {
-      ctx.fillStyle = "rgba(255,77,61,0.06)"; ctx.fillRect(0, 0, w, h);
-    }
   }
 
   let scan = null;
   function scanlines() {
     if (scan) return scan;
     const c = document.createElement("canvas"); c.width = 4; c.height = 3;
-    const g = c.getContext("2d"); g.fillStyle = "rgba(0,0,0,0.16)"; g.fillRect(0, 2, 4, 1);
+    const g = c.getContext("2d"); g.fillStyle = "rgba(0,0,0,0.14)"; g.fillRect(0, 2, 4, 1);
     scan = ctx.createPattern(c, "repeat");
     return scan;
   }
 
-  // Sparks fly off the Forge's GPUs when they're working hard.
+  // Sparks fly off the Forge's racks when the GPU works hard.
   function drawSparks(dt) {
-    const g = data.hud.gpu || {}, heat = Math.max((g.util || 0) / 100, g.training ? 0.8 : 0);
-    if (!reduced && heat > 0.25 && Math.random() < heat * 0.6) {
-      const i = Math.floor(Math.random() * 3);
-      sparks.push({ gx: 7.5 + i * 1.5, gy: 13.1, h: 32, vx: (Math.random() - 0.5) * 1.2, vy: (Math.random() - 0.5) * 0.6, vh: 40 + Math.random() * 50, life: 1 });
+    const g = data.hud.gpu || {}, heat = Math.max((g.util || 0) / 100, g.training ? 0.8 : 0), ff = inner("forge");
+    if (!reduced && heat > 0.25 && Math.random() < heat * 0.5) {
+      const i = Math.floor(Math.random() * 5);
+      sparks.push({ x: (ff.x + 1.5 + i * 2) * T, y: (ff.y + 0.4) * T, vx: (Math.random() - 0.5) * 30, vy: -20 - Math.random() * 30, life: 1 });
     }
-    sparks = sparks.filter((p) => (p.life -= dt * 1.4) > 0);
+    sparks = sparks.filter((p) => (p.life -= dt * 1.6) > 0);
     sparks.forEach((p) => {
-      p.gx += p.vx * dt; p.gy += p.vy * dt; p.vh -= 160 * dt; p.h = Math.max(0, p.h + p.vh * dt);
-      const [x, y] = toScreen(p.gx, p.gy, p.h);
-      ctx.fillStyle = `rgba(255,${150 + Math.floor(80 * p.life)},80,${p.life})`;
-      ctx.fillRect(x, y, 2 * view.z, 2 * view.z);
+      p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 90 * dt;
+      wctx.fillStyle = `rgba(255,${150 + Math.floor(90 * p.life)},80,${p.life})`; wctx.fillRect(Math.round(p.x), Math.round(p.y), 1, 1);
     });
   }
 
@@ -492,9 +484,9 @@
     pings.forEach((p) => {
       const a = placed.find((x) => x.id === p.agent) || (p.agent === "splinter" && placed.find((x) => x.kind === "splinter"));
       if (!a) return;
-      const k = (now - p.t) / 1600, [x, y] = toScreen(a.pos[0], a.pos[1]);
-      ctx.strokeStyle = mix(PING[p.kind] || C.paper, 0.8 * (1 - k)); ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.ellipse(x, y, (14 + 26 * k) * view.z, (7 + 13 * k) * view.z, 0, 0, Math.PI * 2); ctx.stroke();
+      const k = (now - p.t) / 1600, [x, y] = toScreen(a.pos[0] * T, a.pos[1] * T - 10);
+      ctx.strokeStyle = mix(PING[p.kind] || C.paper, 0.85 * (1 - k)); ctx.lineWidth = 2;
+      const r = (8 + 18 * k) * view.z; ctx.strokeRect(x - r, y - r, 2 * r, 2 * r);
     });
   }
 
@@ -537,7 +529,7 @@
     });
     canvas.addEventListener("wheel", (e) => {
       e.preventDefault();
-      const [x, y] = pos(e), k = Math.exp(-e.deltaY * 0.0015), z = Math.min(2.4, Math.max(0.45, view.z * k));
+      const [x, y] = pos(e), k = Math.exp(-e.deltaY * 0.0015), z = Math.min(8, Math.max(0.75, view.z * k));
       view.x = x - (x - view.x) * (z / view.z); view.y = y - (y - view.y) * (z / view.z); view.z = z;
     }, { passive: false });
     $("#floor-recenter").addEventListener("click", fit);
@@ -818,6 +810,7 @@
 
   function start() {
     canvas = $("#floor-canvas"); ctx = canvas.getContext("2d");
+    loadArt();
     bindInput(); bindKill();
     $("#fh-missions").addEventListener("click", () => { selected = { type: "room", id: "ready" }; openPanel(); });
     load();

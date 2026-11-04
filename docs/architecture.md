@@ -306,6 +306,19 @@ have `search_past_chats` and `read_past_chat`.
   load, sealed-door LEDs, vignette and scanlines. All motion respects reduced-motion.
 - Mission timeline in a Splinter's dossier (every logged step); the HUD mission line opens the Ready Room.
 
+## Milestone 18: The Floor goes pixel art (top-down 3/4)
+
+- Renderer rewritten as a top-down 3/4 tile map (16px art, drawn to an offscreen world canvas and
+  scaled pixel-sharp). Rooms, corridors, wall faces and furniture come from the licensed Retro
+  Cybercity Corporate tileset; without it the Floor draws stand-in blocks.
+- The pack is never committed (license forbids redistribution): `python3 -m wetworks.tools.install_art
+  <archive.7z>` extracts it with a pure-Python 7z reader and copies the five native interior sheets into
+  `wetworks/console/art/` (gitignored).
+- Darkness + lighting pass: a dark overlay with light cut out by room lamps (brighter when busy, dim
+  when everyone sleeps, red pulse on a blocked agent), glowing screens, corridor strips, Forge heat,
+  amber lights on sealed doors, C.L.a.i.R's own glow; then coloured bloom.
+- Characters are stand-ins drawn in the pack's style until image-AI sprites arrive (see art spec).
+
 ## Next milestones
 
 1. Claude powering the agents and the Code cell (Friday).

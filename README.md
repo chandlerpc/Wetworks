@@ -43,6 +43,13 @@ All interfaces use the same Command API:
 | `GET /api/floor` | everything the Floor view draws |
 | `POST /api/halt` | kill switch: `{"halted": true, "confirm": "HALT"}` / `{"halted": false}` |
 
+The Floor uses the Retro Cybercity Corporate pixel-art pack, which is licensed and not in git.
+Install it once on the MSI from the archive you bought, then rebuild:
+
+```
+python3 -m wetworks.tools.install_art ~/Downloads/RCCcorpoTILESETrevamped.7z
+```
+
 On a laptop or desktop the console opens on **the Floor**: an isometric view of the ops center with
 every agent in its room. Click an agent for its dossier, a room for its actions, or the red
 "needs you" button for approvals. The Tactical switch goes back to the list view. On a phone,
