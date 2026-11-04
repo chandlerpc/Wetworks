@@ -1,0 +1,38 @@
+# Content cell (The Writer). Drafts posts for you to review; Wetworks never posts anything itself.
+# Edit freely; it's re-read every run.
+
+[content]
+enabled = true
+
+# Where you post. Each gets drafts written for its format.
+channels = ["linkedin", "x", "blog", "portfolio"]
+
+# How many new ideas a morning run may add, and how many drafts it writes.
+ideas_per_run = 3
+drafts_per_run = 1
+
+# What you write about.
+pillars = [
+  "Building Wetworks in public: a self-hosted multi-agent ops center on one gaming laptop",
+  "Practical AI and automation for small businesses (what actually saves time)",
+  "Local and free models vs paid APIs: real costs and trade-offs",
+  "Lessons from shipping SaaS and freelance work as a solo developer",
+  "AI tools and model releases worth knowing about",
+]
+
+# Your voice. The Writer follows this for every draft.
+voice = """Plain, practical and specific. First person. Short sentences. Show what was built or learned and
+why it matters; numbers and concrete details over hype. No buzzwords, no "game-changer", no emoji walls,
+at most two hashtags on LinkedIn and none elsewhere. End with a real question or a useful takeaway, not a
+call for likes."""
+
+# Never in a draft (case-insensitive). Drafts that mention these are held back and flagged.
+never_mention = ["novarad", "novapacs", "nova ris", "patient", "hipaa", "salary", "income", "net worth",
+                 "bank", "debt", "sydney"]
+
+# Aim: posts per week per channel (used to suggest dates on the calendar).
+[content.cadence]
+linkedin = 2
+x = 3
+blog = 0.5
+portfolio = 0.25

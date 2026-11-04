@@ -374,6 +374,17 @@ have `search_past_chats` and `read_past_chat`.
 - The brief gets yesterday's hours and focus-block count only. Local-brain agents get `observer_today`
   to time things around Patrick's focus; cloud agents get nothing; drills see samples.
 
+## Milestone 22: Content room unsealed (The Writer)
+
+- `wetworks/content.py`: ideas → drafts (per channel: LinkedIn, X, blog, portfolio) → scheduled → posted,
+  plus a calendar of planned posts and open slots from `cadence`. Wetworks never posts.
+- The Writer (Sleeper, 30 min before the morning brief) suggests ideas grounded in the week's finished
+  missions, important Intel findings and The Observer's digests, then drafts the oldest idea in Patrick's
+  `voice`. Local model only (digests are private). Ideas or drafts touching `never_mention` (work,
+  patients, money, family) are dropped or flagged.
+- Agents can list ideas and add new ones (any brain: titles only); drafting stays local.
+- Console Content tab; Content room unsealed on the Floor. Only Game Dev stays sealed.
+
 ## Next milestones
 
 1. Claude powering the agents and the Code cell (Friday).

@@ -15,7 +15,7 @@ ROOMS = [
     {"id": "dayjob", "name": "Day Job", "sealed": False},
     {"id": "finance", "name": "Finance", "sealed": False},
     {"id": "gamedev", "name": "Game Dev", "sealed": True},
-    {"id": "content", "name": "Content", "sealed": True},
+    {"id": "content", "name": "Content", "sealed": False},
 ]
 
 
@@ -24,7 +24,7 @@ def _iso(dt):
 
 
 def floor_state(*, settings, architect, comms, events, scheduler=None, missions=None, approvals=None, forge=None,
-                leads=None, halt=None, finance=None, dayjob=None, observer=None) -> dict:
+                leads=None, halt=None, finance=None, dayjob=None, observer=None, content=None) -> dict:
     busy = set(events.busy)
     since = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
     recent = events.recent(limit=60)
@@ -103,6 +103,14 @@ def floor_state(*, settings, architect, comms, events, scheduler=None, missions=
                        "state": "blocked" if "observer" in errored else ("working" if watching else "idle"),
                        "vendor": "local", "model": local, "last": last("observer"),
                        "watch": {"devices": [d["name"] for d in devs if d["live"]], "paused": observer.paused()}})
+
+    if content is not None:
+        c = content.counts()
+        agents.append({"id": "content", "name": "The Writer", "role": "Sleeper", "room": "content", "kind": "sleeper",
+                       "state": state("content", sleeper=True), "vendor": "local", "model": local,
+                       "next": _iso(nxt.get("content")), "last": last("content"),
+                       "writing": {"ideas": c.get("idea", 0), "drafts": c.get("draft", 0), "scheduled": c.get("scheduled", 0),
+                                   "posted": c.get("posted", 0)}})
 
     forge_info = {}
     if forge is not None:

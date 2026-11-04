@@ -349,13 +349,14 @@ input:focus, textarea:focus { border-color: var(--phosphor-dim); outline: none; 
   .tabs { display: none; }
   .panes {
     display: grid; grid-template-columns: 1.05fr 1.2fr 1fr; gap: var(--s5) var(--s5); padding: var(--s5);
-    grid-template-areas: "ops comms intel" "missions comms leads" "missions comms finance" "missions comms dayjob" "missions comms observer"; align-items: start;
+    grid-template-areas: "ops comms intel" "missions comms leads" "missions comms finance" "missions comms dayjob" "missions comms observer" "missions comms content"; align-items: start;
   }
   #pane-ops { grid-area: ops; }
   #pane-missions { grid-area: missions; padding-left: 0; border-left: 0; border-top: 1px solid var(--seam); padding-top: var(--s4); }
   #pane-comms { grid-area: comms; }
   #pane-intel { grid-area: intel; }
   #pane-leads { grid-area: leads; border-top: 1px solid var(--seam); padding-top: var(--s4); }
+  #pane-content { grid-area: content; border-top: 1px solid var(--seam); padding-top: var(--s4); }
   #pane-observer { grid-area: observer; border-top: 1px solid var(--seam); padding-top: var(--s4); }
   #pane-dayjob { grid-area: dayjob; border-top: 1px solid var(--seam); padding-top: var(--s4); }
   #pane-finance { grid-area: finance; border-top: 1px solid var(--seam); padding-top: var(--s4); }
@@ -556,3 +557,13 @@ body.halted .topbar { box-shadow: inset 0 -2px 0 var(--signal); }
 .obs-cmd { background: #070A08; border: 1px solid var(--seam); border-radius: 8px; padding: var(--s2); overflow-x: auto; font-size: 12.5px; }
 .obs-h4 { margin: var(--s3) 0 4px; font-size: 14px; color: var(--fog); }
 .obs-screens li, .obs-digests li { grid-template-columns: 3.4em 1fr; align-items: start; }
+
+/* ---- Content ---------------------------------------------------------- */
+#ct-new input { width: 100%; }
+.ct-cal li { grid-template-columns: 4.5em 1fr; align-items: start; }
+.ct-cal li .mono { white-space: nowrap; }
+.ct-cal li > span:last-child { display: grid; gap: 2px; }
+.ct-planned { color: var(--paper); }
+.ct-text { width: 100%; resize: vertical; margin-top: var(--s2); font-size: 15px; line-height: 1.5; }
+.ct-posted { opacity: 0.7; }
+.dj-ticket .lead-actions input[type=date], .dj-ticket .lead-actions select { min-height: 34px; font-size: 13px; }

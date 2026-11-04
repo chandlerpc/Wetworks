@@ -869,6 +869,96 @@
     }));
   }
 
+  // ---- Content (drafts only) -------------------------------------------
+  let ctChannels = {};
+  const ctOpen = new Set(), ctTab = {};
+  async function loadContent() {
+    const c = await api("/api/content");
+    ctChannels = c.channels;
+    const n = (c.counts.draft || 0);
+    const tab = $(".tabs button[data-pane=content]"); if (tab) tab.textContent = n ? `Content (${n})` : "Content";
+    const cal = $("#ct-cal"); cal.replaceChildren();
+    const byDay = {};
+    c.calendar.forEach((x) => { (byDay[x.date] = byDay[x.date] || []).push(x); });
+    Object.keys(byDay).sort().slice(0, 7).forEach((d) => {
+      const li = el("li");
+      const planned = byDay[d].filter((x) => x.piece), open = byDay[d].filter((x) => !x.piece);
+      const what = el("span");
+      planned.forEach((x) => what.append(el("span", "ct-planned", `${ctChannels[x.channel] || x.channel}: ${x.title}`)));
+      if (open.length) what.append(el("span", "muted", `open: ${open.map((x) => ctChannels[x.channel] || x.channel).join(", ")}`));
+      li.append(el("span", "mono", new Date(`${d}T12:00:00`).toLocaleDateString([], { weekday: "short", day: "numeric" })), what);
+      cal.append(li);
+    });
+    const ul = $("#ct-pieces"); ul.replaceChildren();
+    if (!c.pieces.length) ul.append(el("li", "note", "No ideas yet. Add one, or let The Writer suggest some."));
+    c.pieces.forEach((p) => ul.append(pieceItem(p)));
+  }
+  function pieceItem(p) {
+    const li = el("li", `dj-ticket ct-${p.status}`);
+    const head = el("div", "dj-head");
+    head.append(el("strong", null, p.title), el("span", "muted", `${p.status}${p.planned ? ` · ${ctChannels[p.channel] || p.channel} on ${p.planned}` : ""}${p.pillar ? ` · ${p.pillar.slice(0, 50)}` : ""}`));
+    if (p.flags) head.append(el("span", "note warn", `Check before posting: mentions ${p.flags}`));
+    li.append(head);
+    const det = el("details"); det.open = ctOpen.has(p.id);
+    det.addEventListener("toggle", () => (det.open ? ctOpen.add(p.id) : ctOpen.delete(p.id)));
+    det.append(el("summary", null, Object.keys(p.drafts).length ? "Drafts" : "Idea"));
+    if (p.angle) det.append(el("p", "note", p.angle));
+    const chans = Object.keys(ctChannels);
+    if (Object.keys(p.drafts).length) {
+      const cur = ctTab[p.id] && p.drafts[ctTab[p.id]] != null ? ctTab[p.id] : chans.find((c) => p.drafts[c]) || chans[0];
+      const tabs = el("div", "chips");
+      chans.filter((c) => p.drafts[c] != null).forEach((c) => {
+        const b = el("button", "chip", ctChannels[c]); b.type = "button"; b.setAttribute("aria-pressed", String(c === cur));
+        b.addEventListener("click", () => { ctTab[p.id] = c; safe(loadContent)(); });
+        tabs.append(b);
+      });
+      det.append(tabs);
+      const ta = el("textarea", "ct-text"); ta.rows = 8; ta.value = p.drafts[cur] || ""; ta.setAttribute("aria-label", `${ctChannels[cur]} draft`);
+      det.append(ta);
+      if (cur === "x") { const cnt = el("p", "note", ""); const upd = () => (cnt.textContent = `${ta.value.length} / 280`); ta.addEventListener("input", upd); upd(); det.append(cnt); }
+      const row = el("div", "lead-actions");
+      const copy = el("button", "small", "Copy"); copy.type = "button";
+      copy.addEventListener("click", async () => { try { await navigator.clipboard.writeText(ta.value); copy.textContent = "Copied"; } catch { copy.textContent = "Select and copy"; } setTimeout(() => (copy.textContent = "Copy"), 2000); });
+      const save = el("button", "ghost small", "Save edits"); save.type = "button";
+      save.addEventListener("click", async () => { await api(`/api/content/${p.id}`, { method: "POST", body: JSON.stringify({ drafts: { [cur]: ta.value } }) }); save.textContent = "Saved"; });
+      row.append(copy, save); det.append(row);
+    }
+    const acts = el("div", "lead-actions");
+    const redo = el("button", "ghost small", Object.keys(p.drafts).length ? "Redraft all" : "Draft it"); redo.type = "button";
+    redo.addEventListener("click", async () => { redo.disabled = true; redo.textContent = "Drafting…"; await api(`/api/content/${p.id}`, { method: "POST", body: JSON.stringify({ action: "draft" }) }); pollContent(); });
+    acts.append(redo);
+    if (p.status !== "posted") {
+      const d = el("input"); d.type = "date"; d.value = p.planned || ""; d.setAttribute("aria-label", "Post date");
+      const ch = el("select"); ch.setAttribute("aria-label", "Channel");
+      chans.forEach((c) => { const o = el("option", null, ctChannels[c]); o.value = c; o.selected = c === (p.channel || chans[0]); ch.append(o); });
+      const sch = el("button", "ghost small", "Schedule"); sch.type = "button";
+      sch.addEventListener("click", async () => { if (!d.value) return d.focus(); await api(`/api/content/${p.id}`, { method: "POST", body: JSON.stringify({ planned: d.value, channel: ch.value }) }); safe(loadContent)(); });
+      const posted = el("button", "small", "Mark posted"); posted.type = "button";
+      posted.addEventListener("click", async () => { const url = prompt("Link to the post (optional)") || ""; await api(`/api/content/${p.id}`, { method: "POST", body: JSON.stringify({ status: "posted", posted_url: url, channel: ch.value }) }); safe(loadContent)(); });
+      const drop = el("button", "ghost small", "Drop"); drop.type = "button";
+      drop.addEventListener("click", async () => { await api(`/api/content/${p.id}`, { method: "POST", body: JSON.stringify({ status: "dropped" }) }); safe(loadContent)(); });
+      acts.append(d, ch, sch, posted, drop);
+    } else if (p.posted_url) {
+      const a = el("a", null, "View post"); a.href = p.posted_url; a.target = "_blank"; a.rel = "noopener noreferrer"; acts.append(a);
+    }
+    det.append(acts);
+    li.append(det);
+    return li;
+  }
+  let ctPoll = 0;
+  function pollContent() { clearInterval(ctPoll); let n = 0; ctPoll = setInterval(() => { safe(loadContent)(); if (++n > 25) clearInterval(ctPoll); }, 4000); }
+  function bindContent() {
+    $("#ct-new").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const note = $("#ct-note");
+      try {
+        const p = await api("/api/content/ideas", { method: "POST", body: JSON.stringify({ title: $("#ct-title").value, angle: $("#ct-angle").value, draft: true }) });
+        note.textContent = `Added “${p.title}”. The Writer is drafting it.`; note.className = "note";
+        $("#ct-title").value = ""; $("#ct-angle").value = ""; ctOpen.add(p.id); pollContent();
+      } catch (err) { note.textContent = err.message; note.className = "note err"; }
+    });
+  }
+
   // ---- Actions --------------------------------------------------------
   async function runAction(btn) {
     const note = $("#action-note");
@@ -925,9 +1015,9 @@
     showPane(store.get("wetworks.pane") || "ops");
     selectChannel(channel);
     const s = safe(loadStatus), ev = safe(loadEvents), m = safe(loadMessages), f = safe(loadFindings), mi = safe(loadMissions), le = safe(loadLeads);
-    s(); ev(); f(); mi(); le(); safe(loadMemory)(); safe(loadFinance)(); safe(loadDayJob)(); safe(loadObserver)();
+    s(); ev(); f(); mi(); le(); safe(loadMemory)(); safe(loadFinance)(); safe(loadDayJob)(); safe(loadObserver)(); safe(loadContent)();
     const ap = safe(loadApprovals); ap(); timers.push(setInterval(ap, 10000));
-    timers.push(setInterval(le, 30000), setInterval(safe(loadFinance), 60000), setInterval(safe(loadDayJob), 30000), setInterval(safe(loadObserver), 20000));
+    timers.push(setInterval(le, 30000), setInterval(safe(loadFinance), 60000), setInterval(safe(loadDayJob), 30000), setInterval(safe(loadObserver), 20000), setInterval(safe(loadContent), 60000));
     if (window.WWVoice) window.WWVoice.init();
     if (window.WWFloor) {
       window.WWFloor.toTactical = (pane, channel, missionId) => {
@@ -1003,6 +1093,7 @@
   bindFinance();
   bindDayJob();
   bindObserver();
+  bindContent();
   $("#mem-search").addEventListener("submit", (e) => { e.preventDefault(); safe(loadMemory)(); });
   let memT = null;
   $("#mem-q").addEventListener("input", () => { clearTimeout(memT); memT = setTimeout(() => safe(loadMemory)(), 300); });

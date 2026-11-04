@@ -56,7 +56,7 @@ def _iso(dt) -> str | None:
 
 def create_app(*, settings, architect, cells: dict, comms, events, scheduler=None,
                missions=None, open_mission=None, voice=None, leads=None, memory=None, approvals=None,
-               commander=None, forge=None, halt=None, finance=None, dayjob=None, observer=None) -> Starlette:
+               commander=None, forge=None, halt=None, finance=None, dayjob=None, observer=None, content=None) -> Starlette:
     def run_bg(fn):
         threading.Thread(target=fn, daemon=True).start()
 
@@ -178,6 +178,10 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
             if "architect" in events.busy:
                 return JSONResponse({"error": "The Architect is busy. Try again in a moment."}, status_code=409)
             run_bg(lambda: commander.cycle("manual"))
+        elif name == "content" and "content" in cells:
+            if "content" in events.busy:
+                return JSONResponse({"error": "The Writer is already working."}, status_code=409)
+            run_bg(cells["content"].safe_run)
         elif name == "finance" and "finance" in cells:
             run_bg(cells["finance"].safe_run)
         elif name == "revenue" and "revenue" in cells:
@@ -514,6 +518,47 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
         events.add("observer", "info", f"Deleted {n} activity records")
         return JSONResponse({"deleted": n})
 
+    # ---- Content (drafts only; Wetworks never posts) ----------------------------------------------
+    async def content_overview(request: Request):
+        if content is None:
+            return JSONResponse({"error": "Content isn't set up."}, status_code=503)
+        from .content import CHANNELS
+
+        return JSONResponse({"pieces": content.pieces(request.query_params.get("status", "")), "counts": content.counts(),
+                             "calendar": content.calendar(), "channels": {c: CHANNELS[c] for c in content.channels()}})
+
+    async def content_idea(request: Request):
+        if content is None:
+            return JSONResponse({"error": "Content isn't set up."}, status_code=503)
+        b = await request.json()
+        p = content.add_idea(str(b.get("title", "")), str(b.get("angle", "")))
+        if not p:
+            return JSONResponse({"error": "That idea is empty or already on the list."}, status_code=409)
+        if b.get("draft") and "content" in cells:
+            run_bg(lambda: cells["content"].draft(p["id"]))
+        return JSONResponse(p)
+
+    async def content_piece(request: Request):
+        if content is None:
+            return JSONResponse({"error": "Content isn't set up."}, status_code=503)
+        pid = int(request.path_params["pid"])
+        b = await request.json()
+        if b.get("action") == "draft":
+            if "content" not in cells or not content.get(pid):
+                return JSONResponse({"error": "No such idea."}, status_code=404)
+            run_bg(lambda: cells["content"].draft(pid, b.get("channels") or None))
+            return JSONResponse({"ok": True}, status_code=202)
+        try:
+            for ch, text in (b.get("drafts") or {}).items():
+                content.set_draft(pid, str(ch), str(text))
+            p = content.update(pid, status=b.get("status"), planned=b.get("planned"), channel=b.get("channel"),
+                               posted_url=b.get("posted_url"))
+        except ValueError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        if p and b.get("status") == "posted":
+            events.add("content", "done", f"Posted: {p['title'][:80]}")
+        return JSONResponse(p) if p else JSONResponse({"error": "No such idea."}, status_code=404)
+
     async def list_memory(request: Request):
         if memory is None:
             return JSONResponse({"memories": [], "count": 0})
@@ -599,7 +644,7 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
         state = await run_in_threadpool(lambda: floor_state(
             settings=settings, architect=architect, comms=comms, events=events, scheduler=scheduler, missions=missions,
             approvals=approvals, forge=forge, leads=getattr(comms, "leads", None), halt=halt,
-            finance=finance, dayjob=dayjob, observer=observer))
+            finance=finance, dayjob=dayjob, observer=observer, content=content))
         return JSONResponse(state)
 
     async def set_halt(request: Request):
@@ -661,6 +706,9 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
         Route("/api/observer/recordings", observer_record, methods=["POST"]),
         Route("/api/observer/recordings/{rid:int}/{action:str}", observer_record, methods=["POST"]),
         Route("/api/observer/forget", observer_forget, methods=["POST"]),
+        Route("/api/content", content_overview, methods=["GET"]),
+        Route("/api/content/ideas", content_idea, methods=["POST"]),
+        Route("/api/content/{pid:int}", content_piece, methods=["POST"]),
         Route("/api/approvals", list_approvals, methods=["GET"]),
         Route("/api/approvals/{aid:int}", decide_approval, methods=["POST"]),
         Route("/api/memory", list_memory, methods=["GET"]),

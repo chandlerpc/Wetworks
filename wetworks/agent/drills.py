@@ -51,6 +51,7 @@ SIMULATED = {
     "observer_today": lambda: {"active_minutes": 212, "first": "08:10", "apps": [{"app": "Code", "minutes": 95}],
                                "focus_blocks": [{"app": "Code", "start": "09:00", "minutes": 70}], "doing_lately": ["Sample only"],
                                "habits": {"usual_start": "08:05", "usual_end": "18:40"}},
+    "add_content_idea": lambda title="", angle="": "Added idea #901.",
     "benchmark_model": lambda model="", dataset="agent-steps": f"Benchmark of {model} queued; results show in forge_status.",
 }
 
@@ -77,7 +78,7 @@ def drill_toolbox(real: Toolbox) -> Toolbox:
     return out
 
 
-READ_ONLY = {"search_web", "read_page", "recall", "search_past_chats", "read_past_chat", "list_missions",
+READ_ONLY = {"content_ideas", "search_web", "read_page", "recall", "search_past_chats", "read_past_chat", "list_missions",
              "get_mission", "recent_findings", "list_leads", "forge_status"}
 
 

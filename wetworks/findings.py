@@ -61,6 +61,12 @@ class FindingsStore:
         )
         return [r[0] for r in rows]
 
+    def recent(self, days: int = 7, limit: int = 40) -> list[dict]:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        rows = self.db.execute("SELECT cell, topic, title, summary, url, importance, ts FROM findings WHERE ts >= ? "
+                               "ORDER BY importance DESC, ts DESC LIMIT ?", (cutoff, limit)).fetchall()
+        return [dict(zip(("cell", "topic", "title", "summary", "url", "importance", "ts"), r)) for r in rows]
+
     def unreported(self, min_importance: int = 1) -> list[Finding]:
         rows = self.db.execute(
             "SELECT cell, topic, title, summary, url, importance, ts FROM findings "

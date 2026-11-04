@@ -67,7 +67,7 @@
     forge:    { r: [1, 26, 15, 9],  wall: "wood",     floor: "checkNavy",  door: ["n", 6], tint: C.signal },
     dayjob:   { r: [17, 26, 7, 9], wall: "teal", floor: "checkNavy", door: ["n", 2], tint: "#6FD3FF" },
     finance:  { r: [24, 26, 7, 9], wall: "wood", floor: "navyTile", door: ["n", 2], tint: "#E9C46A" },
-    gamedev:  { r: [31, 26, 8, 9], sealed: true },  content: { r: [39, 26, 8, 9], sealed: true },
+    gamedev:  { r: [31, 26, 8, 9], sealed: true },  content: { r: [39, 26, 8, 9], wall: "lavender", floor: "purple", door: ["n", 3], tint: "#FF9BD8" },
   };
   const MAP_W = 48, MAP_H = 36, FACE = 3;   // wall faces are 3 tiles tall
   const CORRIDORS = [[1, 11, 46, 3], [1, 24, 46, 2]];
@@ -88,6 +88,7 @@
               ["rugG", 4.6, 0.6], ["confNavy", 5.6, 0.1, true], ["holo", 1.2, 0.4], ["holo", 12.6, 0.4]],
     comms: [["abstract", 0.4, -2.4], ["deskOlivePC", 0.8, 0.8], ["chairG", 1.5, 2.1], ["holo", 4.3, 0.3]],
     codebay: [["data2", 0.5, -2.4], ["data1", 2, -2.4], ["globe", 4.5, -2.1], ["uDeskB", 1.2, 0.6], ["termB", 1.6, 0.8], ["termP", 4.3, 0.8], ["chairB", 2.6, 3]],
+    content: [["skyline", 0.3, -2.3], ["shelfPics", 3.6, -2.3], ["deskOlivePC", 0.5, 0.6], ["chairP", 1.3, 1.9], ["holo", 4.6, 0.3]],
     dayjob: [["data1", 0.3, -2.4], ["globe", 1.8, -2.1], ["data2", 3.4, -2.4], ["deskPCv", 0.4, 0.5], ["chairB", 1.3, 1.8], ["termB", 3.2, 0.3]],
     finance: [["chart", 0.2, -2.3], ["data2", 3.1, -2.4], ["deskPC", 0.4, 0.5], ["chairG", 1.3, 1.8], ["drawersItems", 3.3, 0.2]],
     forge: [["cabRed", 0.5, -2], ["cabPurple", 2.5, -2], ["cabRed", 4.5, -2], ["cabPurple", 6.5, -2], ["cabRed", 8.5, -2], ["termP", 10.5, 0.2], ["chairRside", 11.8, 0.6]],
@@ -100,6 +101,7 @@
     revenue:   { room: "revenue", home: [6, 3.6], station: [3.9, 3.4], bunk: [10, 3.7] },
     learner:   { room: "archives", home: [6.6, 3.5], station: [2.4, 2], bunk: [7.4, 3.8] },
     forge:     { room: "forge",   home: [8, 3.5], station: [4.5, 2.2] },
+    content:   { room: "content", home: [4.2, 3.2], station: [1.6, 2.4], bunk: [5, 3.4] },
     observer:  { room: "archives", home: [2.2, 3.3], station: [4.6, 2.4] },
     dayjob:    { room: "dayjob", home: [3.6, 3.2], station: [1.8, 2.3], bunk: [4.1, 3.4] },
     finance:   { room: "finance", home: [3.5, 3.2], station: [1.8, 2.3], bunk: [4.1, 3.4] },
@@ -632,6 +634,7 @@
       if (a.next !== undefined) add("Next run", when(a.next));
       if (a.waiting_on_you) add("Waiting on you", `${a.waiting_on_you} approval${a.waiting_on_you === 1 ? "" : "s"}`);
       if (a.pipeline) add("Pipeline", `${a.pipeline.new || 0} new · ${a.pipeline.contacted || 0} contacted · ${a.pipeline.won || 0} won`);
+      if (a.writing) add("Writing", `${a.writing.drafts} drafts · ${a.writing.ideas} ideas · ${a.writing.scheduled} scheduled · ${a.writing.posted} posted`);
       if (a.watch) add("Watching", a.watch.paused ? "Paused" : a.watch.devices.length ? a.watch.devices.join(", ") : "No helper running");
       if (a.support) add("Support", `${a.support.open} open · ${a.support.fixes} fixes · ${a.support.docs} files`);
       if (a.money) add("Money", `${a.money.transactions} transactions · ${a.money.due_this_week} due this week`
@@ -656,8 +659,8 @@
         b.addEventListener("click", () => act("cycle", b));
         row.append(b);
       }
-      if (a.id === "finance" || a.id === "dayjob" || a.id === "observer") {
-        const b = el("button", "small", { finance: "Open Finance", dayjob: "Open Day Job", observer: "Open Observer" }[a.id]); b.type = "button";
+      if (["finance", "dayjob", "observer", "content"].includes(a.id)) {
+        const b = el("button", "small", { finance: "Open Finance", dayjob: "Open Day Job", observer: "Open Observer", content: "Open Content" }[a.id]); b.type = "button";
         b.addEventListener("click", () => window.WWFloor.toTactical(a.id));
         row.append(b);
       }
@@ -706,6 +709,11 @@
             b.addEventListener("click", () => { selected = { type: "agent", id: `splinter-${m.id}` }; openPanel(); });
             body.append(b);
           });
+        }
+        if (r.id === "content") {
+          const b = el("button", "small", "Open Content"); b.type = "button";
+          b.addEventListener("click", () => window.WWFloor.toTactical("content"));
+          body.append(el("p", "muted", "The Writer drafts posts; nothing is posted until you copy it."), b);
         }
         if (r.id === "finance" || r.id === "dayjob") {
           body.append(el("p", "muted", r.id === "finance" ? "Your money stays on the MSI: only the local model reads it."

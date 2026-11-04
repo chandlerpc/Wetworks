@@ -292,6 +292,23 @@
       </details>
     </section>
 
+    <!-- Content: drafts only -->
+    <section id="pane-content" class="pane" aria-labelledby="content-h">
+      <h2 id="content-h">Content</h2>
+      <p class="note">The Writer drafts posts in your voice (config/content.toml). Wetworks never posts: copy a draft, post it yourself, then mark it posted.</p>
+      <form id="ct-new" class="dj-new">
+        <input id="ct-title" type="text" placeholder="Post idea" aria-label="Post idea" autocomplete="off">
+        <input id="ct-angle" type="text" placeholder="The specific point or story (optional)" aria-label="Angle" autocomplete="off">
+        <div class="lead-actions"><button type="submit" class="small">Add &amp; draft</button>
+          <button type="button" class="ghost small" data-action="content">Suggest ideas now</button></div>
+      </form>
+      <p id="ct-note" class="note"></p>
+      <h3 class="fin-h">Coming up</h3>
+      <ul id="ct-cal" class="fin-list ct-cal"></ul>
+      <h3 class="fin-h">Drafts and ideas</h3>
+      <ul id="ct-pieces" class="dj-tickets"></ul>
+    </section>
+
     <!-- Intel: findings -->
     <section id="pane-intel" class="pane" aria-labelledby="intel-h">
       <h2 id="intel-h">Intel</h2>
@@ -308,6 +325,7 @@
     <button type="button" data-pane="leads">Leads</button>
     <button type="button" data-pane="finance">Finance</button>
     <button type="button" data-pane="dayjob">Day Job</button>
+    <button type="button" data-pane="content">Content</button>
     <button type="button" data-pane="observer">Observer</button>
   </nav>
 

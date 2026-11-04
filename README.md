@@ -125,6 +125,13 @@ a ticket (patient details are stripped automatically, but leave names out when y
 Technician drafts the likely cause, steps, questions and a reply, using your own notes first. Add KB
 articles or notes with **Add file**; when you mark a ticket solved, what fixed it is saved for next time.
 
+## Content
+
+The Writer turns what you've been building and reading into post ideas and drafts for LinkedIn, X, your
+blog and portfolio, in the voice set in `config/content.toml` (also pillars, cadence, and words that must
+never appear). Wetworks never posts: in **Content**, edit a draft, copy it, post it yourself, then
+**Mark posted**. Add your own ideas any time, or ask C.L.a.i.R to note one.
+
 ## The Observer
 
 Learns how your day works on your own Mac and the MSI and suggests how Wetworks can fit around it.

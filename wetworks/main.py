@@ -91,6 +91,10 @@ def build(settings):
 
     observer = Observer(settings.data_dir / "observer.db", settings.config_dir / "observer.toml", tz=settings.timezone)
     observer_cell = ObserverCell(ctx, observer)
+    from .cells.content import ContentCell
+    from .content import Content
+
+    content = Content(settings.data_dir / "content.db", settings.config_dir / "content.toml")
     architect.min_importance = int(intel.config.get("intel", {}).get("min_importance_for_brief", 2))
     missions = MissionStore(settings.data_dir / "missions.db")
     coder = Coder(ctx, missions,
@@ -117,6 +121,8 @@ def build(settings):
     comms.finance = finance
     comms.dayjob = dayjob
     comms.observer = observer
+    comms.content = content
+    content_cell = ContentCell(ctx, content, missions=missions, observer=observer)
     learner = Learner(ctx, comms, missions)
 
     # ---- agents ----
@@ -153,7 +159,7 @@ def build(settings):
                             chats=chats, forge=forge, finance=finance,
                             finance_level=finance_level(settings, finance, cloud=settings.agent_brain != "local"),
                             dayjob=dayjob, dayjob_local=settings.agent_brain == "local",
-                            observer=observer, observer_local=settings.agent_brain == "local")
+                            observer=observer, observer_local=settings.agent_brain == "local", content=content)
     for name in ("merge_pull_request", "switch_local_model"):
         if name in toolbox.tools:
             approvals.executors[name] = toolbox.tools[name].fn
@@ -176,7 +182,7 @@ def build(settings):
                                 followups=followups, agent_name="clair", daily_mission_cap=settings.agent_daily_missions,
                                 commander=commander, chats=chats, finance=finance,
                                 finance_level=finance_level(settings, finance, cloud=True),
-                                dayjob=dayjob, dayjob_local=False, observer=observer, observer_local=False)
+                                dayjob=dayjob, dayjob_local=False, observer=observer, observer_local=False, content=content)
     clair_brain = lambda: "gemini" if comms.clair_mode == "cloudflare" else default_brain()
     clair = ClairAgent(toolbox=clair_tools, ask=recorded(clair_ask(bridge, make_ask(settings, architect.llm, "clair"), clair_mode),
                                                          traces, "clair", clair_brain),
@@ -198,7 +204,7 @@ def build(settings):
                           architect_tools=toolbox, context_fn=architect.context_block, events=architect.events,
                           leads=leads, missions=missions, settings=settings, lessons_fn=forge.lessons)
     commander.halt = operator.halt = comms.halt = comms.drills.halt = halt
-    return architect, {"intel": intel, "revenue": revenue, "learner": learner, "finance": finance_cell, "dayjob": dayjob_cell, "observer": observer_cell}, comms
+    return architect, {"intel": intel, "revenue": revenue, "learner": learner, "finance": finance_cell, "dayjob": dayjob_cell, "observer": observer_cell, "content": content_cell}, comms
 
 
 def load_overrides(settings) -> None:
@@ -308,6 +314,7 @@ def run() -> None:
     sleepers.register(cells["revenue"], [settings.morning_brief], lead_minutes=settings.revenue_lead_minutes)
     sleepers.register(cells["finance"], [settings.morning_brief], lead_minutes=20)
     sleepers.register(cells["dayjob"], [settings.morning_brief], lead_minutes=15)
+    sleepers.register(cells["content"], [settings.morning_brief], lead_minutes=30)
     sleepers.register(cells["learner"], [settings.learner_time])
     sched.add_job(cells["observer"].safe_run, CronTrigger(hour=23, minute=15, timezone=settings.timezone),
                   id="observer_nightly", misfire_grace_time=3600, coalesce=True)
@@ -358,7 +365,7 @@ def run() -> None:
                      open_mission=comms.open_mission_fn, voice=Voice(settings, architect.ledger,
                                                                  vocab_fn=lambda: [l["business"] for l in comms.leads.recent(limit=12)]), leads=comms.leads,
                      memory=comms.memory, approvals=comms.approvals, commander=comms.commander, forge=comms.forge,
-                     halt=comms.halt, finance=comms.finance, dayjob=comms.dayjob, observer=comms.observer)
+                     halt=comms.halt, finance=comms.finance, dayjob=comms.dayjob, observer=comms.observer, content=comms.content)
     log.info("Console listening on port %d", settings.console_port)
     uvicorn.run(app, host="0.0.0.0", port=settings.console_port, log_level="warning")
     sched.shutdown(wait=False)

@@ -8,7 +8,7 @@ from .runtime import Tool, Toolbox
 
 def build_toolbox(*, llm, memory, missions, open_mission, findings, leads, revenue, notify,
                   followups, workspace=None, agent_name="architect", daily_mission_cap=6, commander=None,
-                  finance=None, finance_level="none", dayjob=None, dayjob_local=False, observer=None, observer_local=False,
+                  finance=None, finance_level="none", dayjob=None, dayjob_local=False, observer=None, observer_local=False, content=None,
                   chats=None, forge=None) -> Toolbox:
     t = Toolbox()
 
@@ -149,6 +149,16 @@ def build_toolbox(*, llm, memory, missions, open_mission, findings, leads, reven
     elif observer is not None:
         t.add(Tool("observer_today", "How Patrick's day is going. It stays on the MSI and isn't shared with you.", {},
                    lambda: "Patrick's activity stays on the MSI and isn't shared with cloud models."))
+
+    # ---- content ideas (fine for any brain: no private data; drafting stays local) --------
+    if content is not None:
+        t.add(Tool("content_ideas", "Patrick's post ideas, drafts and posting calendar (titles and status).", {},
+                   lambda: [{"id": p["id"], "title": p["title"], "status": p["status"], "planned": p["planned"]}
+                            for p in content.pieces(limit=20)] or "No ideas yet."))
+        t.add(Tool("add_content_idea", "Add a post idea for Patrick (The Writer drafts it; nothing is posted).",
+                   {"title": "the idea", "angle": "the specific point or story"},
+                   lambda title, angle="": (lambda p: f"Added idea #{p['id']}." if p else "Already have that idea.")(
+                       content.add_idea(str(title), str(angle), source=agent_name))))
 
     # ---- memory and time -------------------------------------------------------
     t.add(Tool("remember", "Save a durable fact Patrick stated (a preference, decision, project, person).",
