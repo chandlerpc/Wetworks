@@ -25,6 +25,9 @@ DEST = Path(__file__).resolve().parent.parent / "console" / "art"
 
 
 def install(source: Path, dest: Path = DEST) -> list[str]:
+    if not source.exists():
+        hint = " Files downloaded in Windows are under /mnt/c/Users/<you>/Downloads." if str(source).startswith(str(Path.home())) else ""
+        raise SystemExit(f"File not found: {source}.{hint}")
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         if source.is_file():
