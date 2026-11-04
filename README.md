@@ -40,6 +40,14 @@ All interfaces use the same Command API:
 | `GET/POST /api/missions` | list / start missions |
 | `GET /api/missions/{id}` | one mission: steps, write-up, sources |
 | `POST /api/missions/{id}/cancel` | cancel a queued or running mission |
+| `GET /api/floor` | everything the Floor view draws |
+| `POST /api/halt` | kill switch: `{"halted": true, "confirm": "HALT"}` / `{"halted": false}` |
+
+On a laptop or desktop the console opens on **the Floor**: an isometric view of the ops center with
+every agent in its room. Click an agent for its dossier, a room for its actions, or the red
+"needs you" button for approvals. The Tactical switch goes back to the list view. On a phone,
+Ops starts with a small room map. The kill switch (bottom right on the Floor) stops all autonomous
+work until you resume; it stays set across restarts.
 
 Run a mission from the terminal:
 

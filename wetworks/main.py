@@ -27,6 +27,7 @@ from .agent.state import Approvals, Followups
 from .agent.toolkit import build_toolbox
 from .agent.traces import Traces, recorded
 from .forge import Forge
+from .halt import Halt
 from .knowledge import ChatArchive, sync_knowledge
 from .memory import Memory
 from .cells.revenue import Revenue
@@ -59,6 +60,7 @@ def build(settings):
              loaded, known, memory.count(), chats.count())
     # Every agent decision is recorded for The Forge; brain says who made it (teachers: gemini, claude).
     traces = Traces(settings.data_dir / "traces.db")
+    halt = Halt(settings.data_dir / "HALTED")
     default_brain = lambda: "claude" if settings.agent_brain == "claude-api" else "local"
     forge = Forge(settings=settings, llm=architect.llm, traces=traces, events=architect.events,
                   data_dir=settings.data_dir / "forge", runner_url=settings.forge_url, ollama_url=settings.ollama_url)
@@ -66,7 +68,9 @@ def build(settings):
     if active.exists() and active.read_text().strip():
         architect.llm.ollama.model = active.read_text().strip()  # a model promoted from The Forge
     ctx = CellContext(settings=settings, llm=architect.llm, findings=architect.findings, events=architect.events,
-                      memory=memory, ask=recorded(make_ask(settings, architect.llm, "cells"), traces, "cells", default_brain))
+                      memory=memory, ask=recorded(make_ask(settings, architect.llm, "cells"), traces, "cells", default_brain),
+                      halt=halt)
+    forge.halt = halt
     intel = Intel(ctx)
     leads = LeadStore(settings.data_dir / "leads.db")
     revenue = Revenue(ctx, leads)
@@ -144,6 +148,7 @@ def build(settings):
 
     operator.on_done = on_done
     comms.commander, comms.approvals, comms.chats, comms.forge = commander, approvals, chats, forge
+    commander.halt = operator.halt = comms.halt = halt
     return architect, {"intel": intel, "revenue": revenue, "learner": learner}, comms
 
 
@@ -244,7 +249,8 @@ def run() -> None:
     app = create_app(settings=settings, architect=architect, cells=cells, comms=comms,
                      events=architect.events, scheduler=sched, missions=comms.missions,
                      open_mission=comms.open_mission_fn, voice=Voice(settings, architect.ledger), leads=comms.leads,
-                     memory=comms.memory, approvals=comms.approvals, commander=comms.commander, forge=comms.forge)
+                     memory=comms.memory, approvals=comms.approvals, commander=comms.commander, forge=comms.forge,
+                     halt=comms.halt)
     log.info("Console listening on port %d", settings.console_port)
     uvicorn.run(app, host="0.0.0.0", port=settings.console_port, log_level="warning")
     sched.shutdown(wait=False)

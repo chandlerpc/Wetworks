@@ -66,11 +66,13 @@ class SplinterOperator:
         """Call after queueing a mission so the worker picks it up right away."""
         self.wake.set()
 
+    halt = None  # wetworks.halt.Halt: when set, queued missions wait
+
     def _loop(self) -> None:
         while True:
             self.wake.wait(timeout=60)
             self.wake.clear()
-            while (m := self.store.next_queued()) is not None:
+            while not (self.halt and self.halt.is_set()) and (m := self.store.next_queued()) is not None:
                 self.run_one(m)
 
     def run_one(self, m: dict) -> dict:

@@ -56,7 +56,7 @@ def _iso(dt) -> str | None:
 
 def create_app(*, settings, architect, cells: dict, comms, events, scheduler=None,
                missions=None, open_mission=None, voice=None, leads=None, memory=None, approvals=None,
-               commander=None, forge=None) -> Starlette:
+               commander=None, forge=None, halt=None) -> Starlette:
     def run_bg(fn):
         threading.Thread(target=fn, daemon=True).start()
 
@@ -316,10 +316,34 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
             return JSONResponse({"error": str(e)}, status_code=400)
         return JSONResponse({"error": "Unknown Forge action."}, status_code=404)
 
+    async def floor(request: Request):
+        from .floor import floor_state
+
+        state = await run_in_threadpool(lambda: floor_state(
+            settings=settings, architect=architect, comms=comms, events=events, scheduler=scheduler, missions=missions,
+            approvals=approvals, forge=forge, leads=getattr(comms, "leads", None), halt=halt))
+        return JSONResponse(state)
+
+    async def set_halt(request: Request):
+        if halt is None:
+            return JSONResponse({"error": "The kill switch isn't available."}, status_code=503)
+        body = await request.json()
+        on = body.get("halted")
+        if not isinstance(on, bool):
+            return JSONResponse({"error": "Send halted: true or false."}, status_code=400)
+        if on and body.get("confirm") != "HALT":
+            return JSONResponse({"error": "Confirm the halt."}, status_code=400)
+        halt.set(on)
+        events.add("architect", "warn" if on else "info",
+                   "KILL SWITCH: all autonomous work halted by Patrick" if on else "Kill switch released: work resumes")
+        if not on and getattr(comms, "operator", None) is not None:
+            comms.operator.submit()  # pick queued missions back up
+        return JSONResponse({"halted": halt.is_set()})
+
     async def index(request: Request):
         v = _asset_version()
         html = (CONSOLE_DIR / "index.html").read_text()
-        for asset in ("console.css", "console.js", "voice.js", "manifest.json"):
+        for asset in ("console.css", "console.js", "voice.js", "floor.js", "manifest.json"):
             html = html.replace(f"/static/{asset}", f"/static/{asset}?v={v}")
         return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
@@ -334,6 +358,8 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
         Route("/api/voice", voice_config, methods=["GET"]),
         Route("/api/voice/transcribe", voice_transcribe, methods=["POST"]),
         Route("/api/voice/say", voice_say, methods=["POST"]),
+        Route("/api/floor", floor, methods=["GET"]),
+        Route("/api/halt", set_halt, methods=["POST"]),
         Route("/api/forge", forge_status, methods=["GET"]),
         Route("/api/forge/{name}", forge_action, methods=["POST"]),
         Route("/api/approvals", list_approvals, methods=["GET"]),

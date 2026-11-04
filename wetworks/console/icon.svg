@@ -1,14 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
-    <radialGradient id="g" cx="38%" cy="35%" r="65%">
-      <stop offset="0" stop-color="#E2FFD3"/>
-      <stop offset="0.45" stop-color="#9BE37D"/>
-      <stop offset="1" stop-color="#2F6B1F"/>
+    <radialGradient id="sweep" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#9BE37D" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#9BE37D" stop-opacity="0"/>
     </radialGradient>
   </defs>
   <rect width="512" height="512" rx="112" fill="#0A0F0B"/>
-  <rect x="64" y="200" width="384" height="112" rx="56" fill="#070A08" stroke="#243028" stroke-width="8"/>
-  <circle cx="148" cy="256" r="34" fill="url(#g)"/>
-  <circle cx="256" cy="256" r="34" fill="url(#g)"/>
-  <circle cx="364" cy="256" r="34" fill="url(#g)"/>
+  <g fill="none" stroke="#3E5C33" stroke-width="10">
+    <circle cx="256" cy="256" r="170"/>
+    <circle cx="256" cy="256" r="112"/>
+    <circle cx="256" cy="256" r="54"/>
+    <path d="M256 70v372M70 256h372" stroke-width="6"/>
+  </g>
+  <path d="M256 256 L256 86 A170 170 0 0 1 403 171 Z" fill="url(#sweep)"/>
+  <path d="M256 256 L403 171" stroke="#9BE37D" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="338" cy="204" r="14" fill="#9BE37D"/>
+  <circle cx="256" cy="256" r="12" fill="#D7DFD5"/>
 </svg>

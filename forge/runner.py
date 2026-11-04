@@ -26,6 +26,17 @@ def gpu_name() -> str:
         return f"unavailable ({type(e).__name__})"
 
 
+def gpu_stats() -> dict:
+    """Live load, temperature and memory for the ops-center Floor."""
+    try:
+        out = subprocess.run(["nvidia-smi", "--query-gpu=utilization.gpu,temperature.gpu,memory.used,memory.total",
+                              "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=10).stdout
+        util, temp, used, total = (float(x) for x in out.strip().split("\n")[0].split(","))
+        return {"gpu_util": util, "gpu_temp": temp, "gpu_mem_used": used, "gpu_mem_total": total}
+    except Exception:
+        return {}
+
+
 def running() -> str | None:
     p = current["proc"]
     if p is not None and p.poll() is None:
@@ -44,7 +55,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/health":
-            return self._send(200, {"ok": True, "gpu": gpu_name(), "running": running()})
+            return self._send(200, {"ok": True, "gpu": gpu_name(), "running": running(), **gpu_stats()})
         m = re.fullmatch(r"/jobs/([A-Za-z0-9_-]{1,80})", self.path)
         if not m:
             return self._send(404, {"error": "not found"})

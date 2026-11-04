@@ -57,6 +57,7 @@ class Forge:
         """)
         self.db.commit()
         self.working = False
+        self.halt = None  # wetworks.halt.Halt
 
     # ---- datasets ------------------------------------------------------------------
     def build_agent_dataset(self, name: str = "agent-steps", holdout: float = 0.1) -> dict:
@@ -147,7 +148,7 @@ class Forge:
 
     def tick(self) -> None:
         """Called every few minutes: start the next job if it's allowed to run now."""
-        if self.working:
+        if self.working or (self.halt is not None and self.halt.is_set()):
             return
         with self.lock:
             rows = self.db.execute("SELECT * FROM jobs WHERE status = 'queued' ORDER BY run_now DESC, created").fetchall()
@@ -236,7 +237,7 @@ class Forge:
     def models(self) -> list[dict]:
         try:
             tags = httpx.get(f"{self.ollama}/api/tags", timeout=10).json().get("models", [])
-        except httpx.HTTPError:
+        except Exception:
             return []
         return [{"name": m["name"], "size_gb": round(m.get("size", 0) / 1e9, 1)} for m in tags]
 
@@ -287,8 +288,8 @@ class Forge:
 
     def health(self) -> dict:
         try:
-            return httpx.get(f"{self.runner}/health", timeout=10).json()
-        except httpx.HTTPError as e:
+            return httpx.get(f"{self.runner}/health", timeout=5).json()
+        except Exception as e:  # the Floor polls this; never let it fail
             return {"ok": False, "error": f"Forge container unreachable ({type(e).__name__})"}
 
     def use_model(self, model: str) -> str:

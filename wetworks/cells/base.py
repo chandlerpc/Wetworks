@@ -19,6 +19,7 @@ class CellContext:
     events: EventLog | None = None
     memory: object | None = None  # wetworks.memory.Memory
     ask: object | None = None     # agent brain: ask(system, prompt, max_tokens) -> text; None = fixed routines
+    halt: object | None = None    # wetworks.halt.Halt: when set, scheduled cells don't run
 
 
 class Cell(ABC):
@@ -43,6 +44,9 @@ class Cell(ABC):
     def safe_run(self) -> list[Finding]:
         """Run without ever crashing the scheduler. Logs to the activity feed when available."""
         ev = self.ctx.events
+        if self.ctx.halt is not None and self.ctx.halt.is_set():
+            self.log.info("%s skipped: Wetworks is halted", self.name)
+            return []
         if ev is not None:
             if self.name in ev.busy:
                 self.log.info("%s already running; skipping", self.name)

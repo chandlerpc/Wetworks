@@ -540,6 +540,21 @@
   // ---- Session --------------------------------------------------------
   const safe = (fn) => () => fn().catch((e) => { if (e.message !== "unauthorized") $("#statusline").textContent = "Lost contact with the MSI. Retrying…"; });
 
+  // ---- Views: Floor (isometric) or Tactical (panels). Desktop only; phones use the map + tabs.
+  let view = "floor";
+  try { view = localStorage.getItem("wetworks.view") || "floor"; } catch {}
+  const wide = () => window.matchMedia("(min-width: 1000px)").matches;
+  function setView(v) {
+    view = v;
+    try { localStorage.setItem("wetworks.view", v); } catch {}
+    const floor = v === "floor" && wide();
+    document.body.classList.toggle("view-floor", floor);
+    $("#floor").hidden = !floor;
+    $$("#viewswitch button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.view === v)));
+    setTopbarHeight();
+    if (window.WWFloor) (floor ? window.WWFloor.show() : window.WWFloor.hide());
+  }
+
   function start() {
     $("#gate").hidden = true;
     $("#app").hidden = false;
@@ -552,12 +567,26 @@
     const ap = safe(loadApprovals); ap(); timers.push(setInterval(ap, 10000));
     timers.push(setInterval(le, 30000));
     if (window.WWVoice) window.WWVoice.init();
+    if (window.WWFloor) {
+      window.WWFloor.toTactical = (pane, channel, missionId) => {
+        setView("tactical");
+        if (channel) selectChannel(channel);
+        if (missionId) showMission(missionId);
+        showPane(pane);
+      };
+      window.WWFloor.start();
+      $("#viewswitch").hidden = false;
+      setView(view);
+    }
     timers.push(setInterval(s, 8000), setInterval(ev, 4000), setInterval(m, 2500), setInterval(f, 30000), setInterval(mi, 5000));
   }
 
   function lock(message = "") {
     timers.splice(0).forEach(clearInterval);
     if (window.WWVoice) window.WWVoice.stop();
+    document.body.classList.remove("view-floor");
+    $("#floor").hidden = true; $("#viewswitch").hidden = true; $("#inspect").hidden = true;
+    if (window.WWFloor) window.WWFloor.hide();
     token = ""; store.del("wetworks.token");
     $("#app").hidden = true; $("#tabs").hidden = true; $("#logout").hidden = true;
     $("#gate").hidden = false;
@@ -605,6 +634,8 @@
   $$(".tabs button").forEach((b) => b.addEventListener("click", () => showPane(b.dataset.pane)));
   $$("[data-action]").forEach((b) => b.addEventListener("click", () => runAction(b)));
   $("#new-mission").addEventListener("submit", startMission);
+  $$("#viewswitch button").forEach((b) => b.addEventListener("click", () => setView(b.dataset.view)));
+  window.matchMedia("(min-width: 1000px)").addEventListener("change", () => { if (token) setView(view); });
   $("#mem-add").addEventListener("submit", addMemory);
   $("#mem-search").addEventListener("submit", (e) => { e.preventDefault(); safe(loadMemory)(); });
   let memT = null;

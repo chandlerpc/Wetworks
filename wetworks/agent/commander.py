@@ -45,6 +45,7 @@ class Commander:
     def __init__(self, *, toolbox, ask, approvals, followups, events, context_fn, memory, max_steps=8,
                  min_gap_minutes=15, paused=None):
         self.paused = paused  # threading.Event set while The Forge trains
+        self.halt = None      # wetworks.halt.Halt
         self.toolbox = toolbox
         self.ask = ask
         self.approvals = approvals
@@ -85,6 +86,8 @@ class Commander:
                 return "Skipped: a cycle ran recently."
             if self.paused is not None and self.paused.is_set():
                 return "Skipped: The Forge is training on the GPU."
+            if self.halt is not None and self.halt.is_set() and reason != "manual":
+                return "Skipped: Wetworks is halted."
             self.last_cycle = time.monotonic()
             due = [f["id"] for f in self.followups.due()]
             self.events.busy.add("architect")

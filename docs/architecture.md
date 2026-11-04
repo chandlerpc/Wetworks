@@ -240,14 +240,26 @@ have `search_past_chats` and `read_past_chat`.
 - Benchmarks: any local model is scored on held-out decisions (valid step, same action, same tool).
 - Switching the agents' local model is approval-gated for The Architect; Patrick can switch any time.
 
+## Milestone 13: The Floor (ops-center UI)
+
+- `wetworks/floor.py` builds one read-only snapshot for the UI (`GET /api/floor`): rooms, every agent
+  with its room, state (idle, working, thinking, blocked, asleep), vendor and model, plus the HUD
+  (spend, GPU/host health, approvals, missions, kill switch, C.L.a.i.R's link).
+  - Blocked = an error from that agent in the last 10 minutes, or The Architect waiting on an approval.
+  - Asleep = Sleepers between runs, and every local agent while The Forge has the GPU.
+  - Each running or queued mission gets its own Splinter in the Ready Room (code missions in the Code Bay).
+- `console/floor.js` draws an isometric canvas Floor: Command Deck, Comms Booth, Intel Watch, Revenue Room,
+  Splinter Ready Room, Code Bay, The Forge (heat follows real GPU load), Archives, and sealed doors
+  (Day Job, Finance, Game Dev, Content). Click an agent for its dossier, a room for its actions,
+  the red phone for approvals. Floor/Tactical switch on screens 1000px and wider; phones get a room map
+  at the top of Ops.
+- Kill switch (`wetworks/halt.py`, `POST /api/halt` with `confirm: "HALT"`): persisted in `data/HALTED`,
+  so it survives restarts. While set, cells, Commander cycles, the Splinter Operator and Forge jobs don't
+  start new work. Chat with C.L.a.i.R and The Architect still works.
+
 ## Next milestones
 
-1. The ops-center UI.
-2. Claude powering the agents and the Code cell (Friday).
-2. One-time import of Mac notes and documents into memory.
-2. Revenue follow-ups: reminders for contacted leads, and a Splinter that researches a lead
-   in depth before you reach out (Sleeper), fed by Intel's money findings.
-3. C.L.a.i.R bridge: The Architect ↔ Cloudflare Worker.
-4. The Forge: local model container with GPU.
-5. Ops-center UI (gritty Splinter Cell style).
-6. Memory: profile seed, Mac notes import, 1-year auto-archive.
+1. Claude powering the agents and the Code cell (Friday).
+2. Revenue follow-ups: reminders for contacted leads, and lead research before outreach.
+3. First real Forge run on the MSI and a benchmark against gemma.
+4. Unseal rooms (Day Job, Finance, Game Dev, Content) as their cells are built.

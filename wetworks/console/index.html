@@ -21,22 +21,65 @@
   <div class="scanlines" aria-hidden="true"></div>
 
   <header class="topbar">
-    <div class="goggles" role="img" aria-label="Agent status">
+    <div class="leds" role="img" aria-label="Agent status">
       <span class="lens" data-agent="architect" title="The Architect"></span>
       <span class="lens" data-agent="clair" title="C.L.a.i.R"></span>
-      <span class="lens" data-agent="intel" title="Intel"></span>
+      <span class="lens" data-agent="intel" title="Sleepers"></span>
     </div>
     <div class="ident">
       <h1>Wetworks</h1>
       <p id="statusline" class="statusline">Connecting…</p>
     </div>
+    <div id="viewswitch" class="viewswitch" role="tablist" aria-label="View" hidden>
+      <button type="button" role="tab" data-view="floor" aria-selected="true">Floor</button>
+      <button type="button" role="tab" data-view="tactical" aria-selected="false">Tactical</button>
+    </div>
     <button id="logout" class="ghost small" type="button" hidden>Lock</button>
   </header>
+
+  <!-- The Floor: isometric ops-center view (desktop) -->
+  <section id="floor" class="floor" aria-label="The Floor" hidden>
+    <canvas id="floor-canvas" aria-label="Isometric view of the Wetworks facility. Select an agent or room to inspect it."></canvas>
+    <div class="fh fh-tl">
+      <p class="fh-label">Spend this month</p>
+      <p id="fh-spend" class="fh-value"></p>
+      <div class="meter"><span id="fh-spend-bar"></span></div>
+      <p id="fh-missions" class="fh-small"></p>
+      <button type="button" id="fh-approvals" class="phone-chip" hidden></button>
+    </div>
+    <div class="fh fh-tr">
+      <p id="fh-health" class="fh-small mono"></p>
+      <p id="fh-link" class="fh-small"></p>
+      <div class="fh-tools">
+        <button type="button" id="floor-recenter" class="ghost small">Recenter</button>
+        <button type="button" id="fh-sound" class="ghost small" aria-pressed="false">Sound</button>
+      </div>
+    </div>
+    <ul id="fh-log" class="fh fh-bl mono" aria-label="Radio log, newest first"></ul>
+    <div id="kill" class="kill fh-br">
+      <button type="button" id="kill-cover" class="kill-cover">Kill switch</button>
+      <button type="button" id="kill-btn" class="kill-btn">Halt all work</button>
+    </div>
+    <div id="fh-halt-banner" class="halt-banner" hidden>
+      <span>Halted. Nothing starts on its own until you resume.</span>
+      <button type="button" id="resume-btn" class="small">Resume</button>
+    </div>
+  </section>
+
+  <aside id="inspect" class="inspect" hidden aria-labelledby="inspect-title">
+    <div class="inspect-head">
+      <div><p id="inspect-sub" class="inspect-sub"></p><h3 id="inspect-title"></h3></div>
+      <button type="button" id="inspect-close" class="ghost small">Close</button>
+    </div>
+    <div id="inspect-body" class="inspect-body"></div>
+  </aside>
 
   <main id="app" class="panes" hidden>
     <!-- Ops: what's going on -->
     <section id="pane-ops" class="pane" aria-labelledby="ops-h">
       <h2 id="ops-h">Ops</h2>
+
+      <div id="floor-map" class="floor-map" aria-label="Facility map"></div>
 
       <div id="needs-you" class="needs-you" hidden>
         <h3>Needs you</h3>
@@ -190,7 +233,7 @@
   <!-- Access code -->
   <div id="gate" class="gate">
     <form id="gate-form" class="gate-card">
-      <div class="goggles big" aria-hidden="true"><span class="lens on"></span><span class="lens on"></span><span class="lens on"></span></div>
+      <img class="gate-mark" src="/static/icon.svg" alt="" width="72" height="72">
       <h2>Wetworks ops</h2>
       <p>Enter the access code from your MSI's <span class="mono">.env</span> file.</p>
       <label for="code" class="sr-only">Access code</label>
@@ -202,5 +245,6 @@
 
   <script src="/static/console.js"></script>
   <script src="/static/voice.js"></script>
+  <script src="/static/floor.js"></script>
 </body>
 </html>
