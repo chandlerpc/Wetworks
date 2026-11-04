@@ -108,6 +108,27 @@
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   let world = null, wctx = null, staticLayer = null, light = null, lctx = null;
 
+  // Colour grades: a blend over the lit scene. Picked in the Look panel, remembered per device.
+  const GRADES = {
+    original: { name: "Original" },
+    nightops: { name: "Night ops", ops: [["multiply", "#3B4C9A", 0.45], ["saturation", "#808080", 0.25]] },
+    nightvision: { name: "Night vision", ops: [["color", "#46FF7E", 0.55], ["multiply", "#6FAF7A", 0.35]] },
+    amber: { name: "Amber noir", ops: [["color", "#E8A33D", 0.4], ["multiply", "#B07A4A", 0.3]] },
+    neon: { name: "Neon", ops: [["overlay", "#5A2A8A", 0.35], ["saturation", "#FF00AA", 0.25]] },
+    ghost: { name: "Ghost", ops: [["saturation", "#808080", 0.85], ["multiply", "#7E8CA8", 0.25]] },
+  };
+  const look = { grade: "original", dark: 80, glow: 100 };
+  try { Object.assign(look, JSON.parse(localStorage.getItem("wetworks.look") || "{}")); } catch {}
+  if (!GRADES[look.grade]) look.grade = "original";
+  function saveLook() { try { localStorage.setItem("wetworks.look", JSON.stringify(look)); } catch {} }
+  function applyGrade(g, W, H) {
+    const gr = GRADES[look.grade];
+    (gr.ops || []).forEach(([mode, color, a]) => {
+      g.globalCompositeOperation = mode; g.globalAlpha = a; g.fillStyle = color; g.fillRect(0, 0, W, H);
+    });
+    g.globalCompositeOperation = "source-over"; g.globalAlpha = 1;
+  }
+
   function mix(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; }
   function roundRect(x, y, w, h, r) {
     ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
@@ -351,7 +372,7 @@
   function drawLighting(placed, now) {
     const W = MAP_W * T, H = MAP_H * T;
     lctx.globalCompositeOperation = "source-over";
-    lctx.fillStyle = "rgba(6,5,16,0.8)"; lctx.fillRect(0, 0, W, H);
+    lctx.fillStyle = `rgba(6,5,16,${look.dark / 100})`; lctx.fillRect(0, 0, W, H);
     lctx.globalCompositeOperation = "destination-out";
     const ls = lights(now);
     placed.forEach((a) => { if (a.id === "clair") ls.push({ x: a.pos[0] * T, y: a.pos[1] * T - 14, r: 40, a: 0.8, color: "#7CF0B4", tint: 0.25 }); });
@@ -367,7 +388,7 @@
     ls.forEach((L) => {
       if (!L.tint) return;
       const gr = wctx.createRadialGradient(L.x, L.y, 1, L.x, L.y, L.r);
-      gr.addColorStop(0, mix(L.color, L.tint)); gr.addColorStop(1, mix(L.color, 0));
+      gr.addColorStop(0, mix(L.color, Math.min(1, L.tint * look.glow / 100))); gr.addColorStop(1, mix(L.color, 0));
       wctx.fillStyle = gr; wctx.fillRect(L.x - L.r, L.y - L.r, 2 * L.r, 2 * L.r);
     });
     wctx.globalCompositeOperation = "source-over";
@@ -421,6 +442,7 @@
     placed.sort((a, b) => a.pos[1] - b.pos[1]).forEach((a) => { boxes[a.id] = drawAgent(wctx, a, now); });
     drawSparks(dt);
     drawLighting(placed, now);
+    applyGrade(wctx, W, H);
     if (data.hud.halted) { wctx.fillStyle = "rgba(255,77,61,0.07)"; wctx.fillRect(0, 0, W, H); }
 
     // blit the world, pixel-sharp
@@ -811,7 +833,7 @@
   function start() {
     canvas = $("#floor-canvas"); ctx = canvas.getContext("2d");
     loadArt();
-    bindInput(); bindKill();
+    bindInput(); bindKill(); bindLook();
     $("#fh-missions").addEventListener("click", () => { selected = { type: "room", id: "ready" }; openPanel(); });
     load();
     poll = setInterval(() => { if (isOpen() || $("#floor-map")?.offsetParent) load(); }, 3000);
@@ -821,6 +843,24 @@
     if (!raf) raf = requestAnimationFrame(frame);
   }
   function hide() { cancelAnimationFrame(raf); raf = 0; }
+
+  function bindLook() {
+    const btn = $("#fh-look"), panel = $("#fh-look-panel"), box = $("#look-grades");
+    btn.addEventListener("click", () => { panel.hidden = !panel.hidden; btn.setAttribute("aria-expanded", String(!panel.hidden)); });
+    Object.entries(GRADES).forEach(([id, g]) => {
+      const b = el("button", "chip", g.name); b.type = "button"; b.setAttribute("role", "radio");
+      b.setAttribute("aria-checked", String(look.grade === id));
+      b.addEventListener("click", () => {
+        look.grade = id; saveLook();
+        box.querySelectorAll("button").forEach((x) => x.setAttribute("aria-checked", String(x === b)));
+      });
+      box.append(b);
+    });
+    [["#look-dark", "dark"], ["#look-glow", "glow"]].forEach(([sel, key]) => {
+      const r = $(sel); r.value = look[key];
+      r.addEventListener("input", () => { look[key] = +r.value; saveLook(); });
+    });
+  }
 
   function inspect(type, id) { selected = { type, id }; openPanel(); }
   window.WWFloor = { start, show, hide, load, inspect, toTactical: () => {} };

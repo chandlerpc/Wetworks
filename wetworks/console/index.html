@@ -56,6 +56,15 @@
       <div class="fh-tools">
         <button type="button" id="floor-recenter" class="ghost small">Recenter</button>
         <button type="button" id="fh-sound" class="ghost small" aria-pressed="false">Sound</button>
+        <button type="button" id="fh-look" class="ghost small" aria-expanded="false" aria-controls="fh-look-panel">Look</button>
+      </div>
+      <div id="fh-look-panel" class="look-panel" hidden>
+        <p class="fh-label">Colour</p>
+        <div id="look-grades" class="look-grades" role="radiogroup" aria-label="Colour grade"></div>
+        <label class="fh-label" for="look-dark">Darkness</label>
+        <input id="look-dark" type="range" min="40" max="95" step="1">
+        <label class="fh-label" for="look-glow">Glow</label>
+        <input id="look-glow" type="range" min="0" max="200" step="5">
       </div>
     </div>
     <ul id="fh-log" class="fh fh-bl mono" aria-label="Radio log, newest first"></ul>
