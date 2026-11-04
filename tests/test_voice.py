@@ -118,7 +118,7 @@ def test_transcribe_hints_vocab_and_keeps_recordings(tmp_path, monkeypatch):
 def test_azure_settings_are_cleaned(monkeypatch, tmp_path):
     from wetworks.config import load_settings
 
-    monkeypatch.setenv("AZURE_SPEECH_KEY", ' "abc123" ')
+    monkeypatch.setenv("AZURE_SPEECH_KEY", ' <"abc123"> ')
     monkeypatch.setenv("AZURE_SPEECH_REGION", "East US")
     monkeypatch.setenv("WETWORKS_DATA_DIR", str(tmp_path))
     s = load_settings()
