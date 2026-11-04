@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     # Sleepers
     intel_lead_minutes: int = 20  # Intel runs this long before each brief
     intel_tier: str = "work"  # Claude tier for Intel when provider = claude
+    revenue_lead_minutes: int = 45  # Revenue hunts once a day, this long before the morning brief
 
     # C.L.a.i.R's Cloudflare Worker (private /wetworks route). Leave blank to run C.L.a.i.R locally.
     clair_url: str = ""

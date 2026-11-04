@@ -71,6 +71,11 @@ class Architect:
         ).fetchall()
         recent = "\n".join(f"- [{t}] (imp {i}) {ti}: {s}" for t, ti, s, i in rows) or "(none yet)"
         busy = ", ".join(sorted(self.events.busy)) or "nobody"
+        leads = getattr(self, "leads", None)
+        if leads is not None:
+            c = leads.counts()
+            recent = recent + (f"\nLead pipeline: {c.get('new', 0)} new, {c.get('contacted', 0)} contacted, "
+                               f"{c.get('replied', 0)} replied, {c.get('won', 0)} won.")
         mtd, budget = self.ledger.month_to_date(), self.s.monthly_budget_usd
         mode = "free local model" if self.s.provider == "local" else f"paid {self.s.provider}"
         facts = (

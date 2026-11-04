@@ -65,6 +65,16 @@ review. It never pushes to main and can't edit workflows, `.env` files or keys. 
 docker compose exec architect python -m wetworks.main code "Add a footer to the console showing the version"
 ```
 
+## Leads (Revenue cell)
+
+Every morning the Revenue cell looks for local businesses that could use your services
+(`config/revenue.toml`: services, area, ideal customers, search terms) and drafts outreach for the
+best fits. It never sends anything: review, copy and track leads in the console's **Leads** tab.
+
+```
+docker compose exec architect python -m wetworks.main run revenue
+```
+
 ## Intel topics
 
 Edit `config/intel.toml` to add, change or pause topics. It's re-read on every run, so no rebuild is needed.

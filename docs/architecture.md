@@ -154,10 +154,24 @@ Other vendors (Gemini, Grok, OpenAI) plug in behind the same `LLM` interface lat
   inside the monthly cap). Friday: `claude-code` on the Max plan.
 - Chat: clAIr and The Architect can open code missions; the console has a Research / Code switch.
 
+## Milestone 8: Revenue cell
+
+- `wetworks/cells/revenue.py`: Sleeper, once a day 45 minutes before the morning brief.
+  Rotates through search terms in `config/revenue.toml`, has the local model pick real, local,
+  independent businesses with a sign of need, scores fit (1-5) and matches a service
+  (Chatbot / Automation / Dashboard). Drafts a short outreach email for fit ≥ 4.
+- Never contacts anyone. Leads and drafts wait in the console's Leads tab; Patrick sets the
+  status (new → contacted → replied → won/lost) and adds notes.
+- Strong leads appear in the brief under "Revenue leads"; the pipeline summary is in the context
+  C.L.a.i.R and The Architect see.
+- Job-board pages are kept as evidence but never used to identify a business, so different
+  businesses posting on the same job board aren't merged.
+
 ## Next milestones
 
 1. Claude Code brain on the Max plan (Friday).
-2. Revenue cell (Sleeper), fed by Intel's money findings.
+2. Revenue follow-ups: reminders for contacted leads, and a Splinter that researches a lead
+   in depth before you reach out (Sleeper), fed by Intel's money findings.
 3. C.L.a.i.R bridge: The Architect ↔ Cloudflare Worker.
 4. The Forge: local model container with GPU.
 5. Ops-center UI (gritty Splinter Cell style).

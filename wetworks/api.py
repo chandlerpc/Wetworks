@@ -55,7 +55,7 @@ def _iso(dt) -> str | None:
 
 
 def create_app(*, settings, architect, cells: dict, comms, events, scheduler=None,
-               missions=None, open_mission=None, voice=None) -> Starlette:
+               missions=None, open_mission=None, voice=None, leads=None) -> Starlette:
     def run_bg(fn):
         threading.Thread(target=fn, daemon=True).start()
 
@@ -164,6 +164,10 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
             if "intel" in events.busy:
                 return JSONResponse({"error": "Intel is already running."}, status_code=409)
             run_bg(cells["intel"].safe_run)
+        elif name == "revenue" and "revenue" in cells:
+            if "revenue" in events.busy:
+                return JSONResponse({"error": "Revenue is already hunting."}, status_code=409)
+            run_bg(cells["revenue"].safe_run)
         elif name in ("brief-morning", "brief-evening"):
             kind = name.split("-")[1]
             if "architect" in events.busy:
@@ -199,6 +203,35 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
             return JSONResponse({"error": "Only queued or running missions can be cancelled."}, status_code=409)
         return JSONResponse({"ok": True}, status_code=202)
 
+    async def list_leads(request: Request):
+        if leads is None:
+            return JSONResponse({"leads": [], "counts": {}})
+        status = request.query_params.get("status") or None
+        return JSONResponse({"leads": leads.recent(status=status), "counts": leads.counts()})
+
+    async def update_lead(request: Request):
+        if leads is None:
+            return JSONResponse({"error": "Leads aren't available."}, status_code=503)
+        body = await request.json()
+        try:
+            lead = leads.update(int(request.path_params["lid"]), status=body.get("status"), notes=body.get("notes"))
+        except ValueError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        if not lead:
+            return JSONResponse({"error": "No lead with that number."}, status_code=404)
+        if body.get("status"):
+            events.add("revenue", "info", f"Lead marked {body['status']}: {lead['business']}")
+        return JSONResponse(lead)
+
+    async def redraft_lead(request: Request):
+        lead = leads.get(int(request.path_params["lid"])) if leads is not None else None
+        if not lead or "revenue" not in cells:
+            return JSONResponse({"error": "No lead with that number."}, status_code=404)
+        text = await run_in_threadpool(cells["revenue"].draft, lead)
+        if not text:
+            return JSONResponse({"error": "Couldn't write a draft just now. Try again in a minute."}, status_code=502)
+        return JSONResponse(leads.get(lead["id"]))
+
     async def index(request: Request):
         v = _asset_version()
         html = (CONSOLE_DIR / "index.html").read_text()
@@ -217,6 +250,9 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
         Route("/api/voice", voice_config, methods=["GET"]),
         Route("/api/voice/transcribe", voice_transcribe, methods=["POST"]),
         Route("/api/voice/say", voice_say, methods=["POST"]),
+        Route("/api/leads", list_leads, methods=["GET"]),
+        Route("/api/leads/{lid:int}", update_lead, methods=["POST"]),
+        Route("/api/leads/{lid:int}/draft", redraft_lead, methods=["POST"]),
         Route("/api/missions", list_missions, methods=["GET"]),
         Route("/api/missions", new_mission, methods=["POST"]),
         Route("/api/missions/{mid:int}", get_mission, methods=["GET"]),

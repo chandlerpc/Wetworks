@@ -1,0 +1,53 @@
+# Revenue cell: finds local businesses that could use your services and drafts outreach.
+# It never contacts anyone; you review every lead in the console's Leads tab.
+# Edit freely; the file is re-read on every run.
+
+[revenue]
+enabled = true
+trial_start = "2026-11-03"
+owner = "Patrick Caldwell"
+company = "CodeVoyage"
+area = "Sanford, Lake Mary and the greater Orlando area, Florida"
+max_new_leads = 8          # per run
+draft_min_fit = 4          # only draft outreach for leads this good (1-5)
+max_drafts = 4             # per run
+queries_per_run = 4        # rotates through the list below so each run looks somewhere new
+
+# What you sell. The cell matches each lead to one of these.
+services = [
+  "AI chatbot for websites and booking (answers questions, takes appointments 24/7)",
+  "Workflow automation (connect forms, email, scheduling and spreadsheets so staff stop retyping data)",
+  "Analytics dashboard (one live view of sales, bookings or operations instead of scattered spreadsheets)",
+]
+
+# Kinds of businesses that tend to need those services.
+ideal_customers = """
+Independent local businesses with 3-50 staff: medical, dental and veterinary practices, salons and
+spas, gyms and climbing gyms, swim and martial-arts schools, contractors and home services, property
+management, law and accounting offices, restaurants with catering or reservations. Skip national
+chains, franchises' corporate offices, and companies that are themselves software or AI vendors.
+"""
+
+# Search terms. Signals of need work best: hiring for admin roles, booking strain, new openings.
+queries = [
+  "Sanford FL hiring receptionist front desk",
+  "Lake Mary FL hiring office administrator",
+  "Orlando small business now booking appointments online",
+  "Sanford FL new business opening",
+  "Lake Mary FL medical practice new patients",
+  "Orlando dental office hiring front desk",
+  "Sanford FL gym opening",
+  "Lake Mary salon spa booking",
+  "Orlando property management company hiring admin",
+  "Seminole County FL small business expansion",
+  "Orlando contractor hiring office manager",
+  "Longwood FL new practice opening",
+]
+
+# Sites that list jobs or businesses rather than being a business. Results from these are still
+# used for signals, but never stored as the lead's own website.
+aggregators = [
+  "indeed.com", "linkedin.com", "glassdoor.com", "ziprecruiter.com", "yelp.com", "facebook.com",
+  "simplyhired.com", "monster.com", "careerbuilder.com", "yellowpages.com", "bbb.org", "mapquest.com",
+  "tripadvisor.com", "nextdoor.com", "instagram.com", "x.com", "twitter.com", "craigslist.org",
+]

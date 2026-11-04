@@ -18,7 +18,7 @@
   let findingsCache = [];
   const timers = [];
 
-  const NAMES = { architect: "The Architect", clair: "C.L.a.i.R", intel: "Intel", splinter: "Splinter", patrick: "You", console: "You" };
+  const NAMES = { architect: "The Architect", clair: "C.L.a.i.R", intel: "Intel", revenue: "Revenue", splinter: "Splinter", patrick: "You", console: "You" };
   const STATUS = { queued: "Queued", running: "Running", done: "Done", failed: "Failed", cancelled: "Cancelled" };
   let openMission = null;
   const JOBS = {
@@ -74,7 +74,8 @@
     $("#ro-host").textContent = `CPU ${h.cpu_percent}%\nRAM ${h.mem_used_gb} of ${h.mem_total_gb} GB\nDisk ${h.disk_free_gb} GB free\nUp ${h.uptime_hours} h`;
 
     // Splinter teams work under The Architect, so they light his lens
-    const busy = (a) => s.busy.includes(a) || (a === "architect" && s.busy.includes("splinter"));
+    const busy = (a) => s.busy.includes(a) || (a === "architect" && s.busy.includes("splinter"))
+      || (a === "intel" && s.busy.includes("revenue"));  // Sleepers share the right-hand lens
     $$(".topbar .lens").forEach((l) => {
       l.classList.toggle("busy", busy(l.dataset.agent));
       l.classList.toggle("on", !busy(l.dataset.agent));
@@ -347,6 +348,94 @@
     } finally { btn.disabled = false; }
   }
 
+  // ---- Leads ----------------------------------------------------------
+  const LEAD_STATUS = { new: "New", contacted: "Contacted", replied: "Replied", won: "Won", lost: "Lost", dismissed: "Not a fit" };
+  let leadFilter = "";
+  async function loadLeads() {
+    const { leads, counts } = await api(`/api/leads${leadFilter ? `?status=${leadFilter}` : ""}`);
+    const c = (k) => counts[k] || 0;
+    $("#lead-counts").textContent = `${c("new")} new · ${c("contacted")} contacted · ${c("replied")} replied · ${c("won")} won`;
+    const chips = $("#lead-filter");
+    if (!chips.children.length) {
+      [["", "Active"], ["new", "New"], ["contacted", "Contacted"], ["replied", "Replied"], ["won", "Won"], ["lost", "Lost"]].forEach(([k, label]) => {
+        const b = el("button", "chip", label);
+        b.type = "button";
+        b.setAttribute("aria-pressed", String(k === leadFilter));
+        b.addEventListener("click", () => {
+          leadFilter = k;
+          $$("#lead-filter .chip").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+          safe(loadLeads)();
+        });
+        chips.append(b);
+      });
+    }
+    const list = $("#leads");
+    const open = new Set($$("#leads details[open]").map((d) => d.dataset.id));
+    list.replaceChildren();
+    if (!leads.length) {
+      list.append(el("li", "note", leadFilter ? "Nothing here yet." : "No leads yet. The Revenue cell hunts every morning before the brief, or tap Hunt now."));
+      return;
+    }
+    leads.forEach((l) => list.append(leadItem(l, open.has(String(l.id)))));
+  }
+
+  function leadItem(l, isOpen) {
+    const li = el("li", "lead");
+    const top = el("div", "lead-top");
+    const h = el("h4");
+    if (l.url) { const a = el("a", null, l.business); a.href = l.url; a.target = "_blank"; a.rel = "noopener noreferrer"; h.append(a); }
+    else h.textContent = l.business;
+    top.append(h, el("span", `fit${l.fit >= 4 ? " hot" : ""}`, `Fit ${l.fit}/5`));
+    li.append(top);
+    if (l.signal) li.append(el("p", "signal", l.signal));
+    const meta = el("div", "meta");
+    if (l.offer) { meta.append(el("span", "offer", l.offer), document.createTextNode(" · ")); }
+    meta.append(document.createTextNode([l.location, ago(l.created)].filter(Boolean).join(" · ")));
+    li.append(meta);
+
+    const actions = el("div", "lead-actions");
+    const sel = el("select");
+    sel.setAttribute("aria-label", `Status for ${l.business}`);
+    Object.entries(LEAD_STATUS).forEach(([k, label]) => { const o = el("option", null, label); o.value = k; o.selected = k === l.status; sel.append(o); });
+    sel.addEventListener("change", async () => {
+      try { await api(`/api/leads/${l.id}`, { method: "POST", body: JSON.stringify({ status: sel.value }) }); safe(loadLeads)(); }
+      catch (err) { if (err.message !== "unauthorized") alert(err.message); }
+    });
+    actions.append(sel);
+    li.append(actions);
+
+    const det = el("details");
+    det.dataset.id = l.id;
+    det.open = isOpen;
+    det.append(el("summary", null, l.draft ? "Outreach draft" : "Write an outreach draft"));
+    if (l.draft) det.append(el("div", "draft", l.draft));
+    const row = el("div", "lead-actions");
+    if (l.draft) {
+      const copy = el("button", "small", "Copy draft"); copy.type = "button";
+      copy.addEventListener("click", async () => {
+        try { await navigator.clipboard.writeText(l.draft); copy.textContent = "Copied"; } catch { copy.textContent = "Select and copy"; }
+        setTimeout(() => (copy.textContent = "Copy draft"), 2000);
+      });
+      row.append(copy);
+    }
+    const redo = el("button", "ghost small", l.draft ? "Rewrite" : "Write draft"); redo.type = "button";
+    redo.addEventListener("click", async () => {
+      redo.disabled = true; redo.textContent = "Writing…";
+      try { await api(`/api/leads/${l.id}/draft`, { method: "POST" }); await loadLeads(); }
+      catch (err) { if (err.message !== "unauthorized") alert(err.message); redo.disabled = false; redo.textContent = "Try again"; }
+    });
+    row.append(redo);
+    det.append(row);
+    const notes = el("input", "notes");
+    notes.placeholder = "Notes (who you spoke to, follow-up date…)";
+    notes.value = l.notes || "";
+    notes.setAttribute("aria-label", `Notes for ${l.business}`);
+    notes.addEventListener("change", () => api(`/api/leads/${l.id}`, { method: "POST", body: JSON.stringify({ notes: notes.value }) }).catch(() => {}));
+    det.append(notes);
+    li.append(det);
+    return li;
+  }
+
   // ---- Actions --------------------------------------------------------
   async function runAction(btn) {
     const note = $("#action-note");
@@ -354,9 +443,11 @@
     note.className = "note";
     try {
       await api(`/api/actions/${btn.dataset.action}`, { method: "POST" });
-      note.textContent = btn.dataset.action === "intel"
-        ? "Intel sweep started. Findings show up in Intel when it's done."
-        : "Brief is being compiled and will land in Discord shortly.";
+      note.textContent = {
+        intel: "Intel sweep started. Findings show up in Intel when it's done.",
+        revenue: "Revenue is hunting. New leads show up in Leads when it's done.",
+      }[btn.dataset.action] || "Brief is being compiled and will land in Discord shortly.";
+      if (btn.closest("#pane-leads")) $("#lead-counts").textContent = "Hunting… new leads appear here in a few minutes.";
       setTimeout(loadEvents, 800);
     } catch (err) {
       if (err.message !== "unauthorized") { note.textContent = err.message; note.className = "note err"; }
@@ -381,8 +472,9 @@
     $("#logout").hidden = false;
     showPane(store.get("wetworks.pane") || "ops");
     selectChannel(channel);
-    const s = safe(loadStatus), ev = safe(loadEvents), m = safe(loadMessages), f = safe(loadFindings), mi = safe(loadMissions);
-    s(); ev(); f(); mi();
+    const s = safe(loadStatus), ev = safe(loadEvents), m = safe(loadMessages), f = safe(loadFindings), mi = safe(loadMissions), le = safe(loadLeads);
+    s(); ev(); f(); mi(); le();
+    timers.push(setInterval(le, 30000));
     if (window.WWVoice) window.WWVoice.init();
     timers.push(setInterval(s, 8000), setInterval(ev, 4000), setInterval(m, 2500), setInterval(f, 30000), setInterval(mi, 5000));
   }

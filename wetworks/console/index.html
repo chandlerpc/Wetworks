@@ -116,6 +116,17 @@
       </form>
     </section>
 
+    <!-- Leads: businesses the Revenue cell found -->
+    <section id="pane-leads" class="pane" aria-labelledby="leads-h">
+      <h2 id="leads-h">Leads</h2>
+      <div class="leads-head">
+        <p id="lead-counts" class="note"></p>
+        <button type="button" class="ghost small" data-action="revenue">Hunt now</button>
+      </div>
+      <div id="lead-filter" class="chips" role="group" aria-label="Filter leads"></div>
+      <ul id="leads" class="leads"></ul>
+    </section>
+
     <!-- Intel: findings -->
     <section id="pane-intel" class="pane" aria-labelledby="intel-h">
       <h2 id="intel-h">Intel</h2>
@@ -129,6 +140,7 @@
     <button type="button" data-pane="missions">Missions</button>
     <button type="button" data-pane="comms">Comms</button>
     <button type="button" data-pane="intel">Intel</button>
+    <button type="button" data-pane="leads">Leads</button>
   </nav>
 
   <!-- Mission detail -->

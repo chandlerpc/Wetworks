@@ -17,6 +17,8 @@ from .architect import Architect
 from .bridge import ClairBridge
 from .cells.base import CellContext
 from .cells.intel import Intel
+from .cells.revenue import Revenue
+from .leads import LeadStore
 from .cells.coder import Coder
 from .cells.splinter import Splinter
 from .code.brain import make_brain
@@ -39,6 +41,9 @@ def build(settings):
     architect = Architect(settings)
     ctx = CellContext(settings=settings, llm=architect.llm, findings=architect.findings, events=architect.events)
     intel = Intel(ctx)
+    leads = LeadStore(settings.data_dir / "leads.db")
+    revenue = Revenue(ctx, leads)
+    architect.leads = leads
     architect.min_importance = int(intel.config.get("intel", {}).get("min_importance_for_brief", 2))
     missions = MissionStore(settings.data_dir / "missions.db")
     coder = Coder(ctx, missions,
@@ -60,7 +65,8 @@ def build(settings):
                   open_mission=open_mission, bridge=bridge)
     operator.on_done = comms.mission_report
     comms.missions, comms.operator, comms.open_mission_fn = missions, operator, open_mission
-    return architect, {"intel": intel}, comms
+    comms.leads = leads
+    return architect, {"intel": intel, "revenue": revenue}, comms
 
 
 def run() -> None:
@@ -92,6 +98,7 @@ def run() -> None:
     sleepers = SleeperOperator(sched, settings.timezone)
     sleepers.register(cells["intel"], [settings.morning_brief, settings.evening_brief],
                       lead_minutes=settings.intel_lead_minutes)
+    sleepers.register(cells["revenue"], [settings.morning_brief], lead_minutes=settings.revenue_lead_minutes)
     sched.start()
     comms.operator.start()
 
@@ -126,7 +133,7 @@ def run() -> None:
 
     app = create_app(settings=settings, architect=architect, cells=cells, comms=comms,
                      events=architect.events, scheduler=sched, missions=comms.missions,
-                     open_mission=comms.open_mission_fn, voice=Voice(settings, architect.ledger))
+                     open_mission=comms.open_mission_fn, voice=Voice(settings, architect.ledger), leads=comms.leads)
     log.info("Console listening on port %d", settings.console_port)
     uvicorn.run(app, host="0.0.0.0", port=settings.console_port, log_level="warning")
     sched.shutdown(wait=False)
