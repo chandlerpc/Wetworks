@@ -8,6 +8,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /
 COPY pyproject.toml ./
 COPY wetworks ./wetworks
 COPY config ./config
+COPY docs ./docs
+COPY README.md ./README.md
 RUN pip install --no-cache-dir .
 
 RUN useradd -u 1000 -m architect && mkdir -p /data/sandbox-runs /data/workspaces /data/forge && chown -R architect /data

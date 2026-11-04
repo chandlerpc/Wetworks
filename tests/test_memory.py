@@ -169,3 +169,29 @@ def test_chat_archive_import_and_search(tmp_path):
     with zipfile.ZipFile(z, "w") as f:
         f.write(p, "data/conversations.json")
     assert arch.import_claude_export(z) == (1, 2) and arch.count() == 1  # re-import replaces
+
+
+def test_handbook_loads_as_knowledge_and_is_readable(tmp_path):
+    from pathlib import Path
+
+    from wetworks.knowledge import read_handbook, sync_knowledge
+    from wetworks.memory import Memory
+
+    m = Memory(tmp_path / "m.db")
+    n = sync_knowledge(m, Path(__file__).parent.parent / "config" / "knowledge")
+    assert n > 100
+    hits = " ".join(x["text"] for x in m.search("merge pull request approval", 5))
+    assert "approval" in hits.lower()
+    toc = read_handbook()
+    assert "docs/handbook.md" in toc and "Privacy" in toc
+    assert "share_with_cloud" in read_handbook("privacy")
+    assert "No section matches" in read_handbook("zzzqqq")
+
+
+def test_agents_have_the_handbook(tmp_path):
+    from wetworks.config import Settings
+    from wetworks.main import build
+
+    _, _, comms = build(Settings(dry_run=True, data_dir=tmp_path, config_dir="config"))
+    assert "Every agent and room" in comms.commander.toolbox.tools["read_handbook"].fn()
+    assert "read_handbook" in comms.clair_agent.__self__.toolbox.tools

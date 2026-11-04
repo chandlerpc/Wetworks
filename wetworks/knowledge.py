@@ -121,3 +121,60 @@ class ChatArchive:
         if not r:
             return ""
         return f"{r[0]} ({r[1][:10]})\n\n{r[2][:max_chars]}"
+
+
+# ---- Handbook: the docs agents can read on demand --------------------------------------------
+DOCS = ("docs/handbook.md", "docs/architecture.md", "README.md", "docs/art-spec.md")
+
+
+def _doc_root() -> Path:
+    return Path(__file__).resolve().parent.parent
+
+
+def handbook_sections() -> list[tuple[str, str, str]]:
+    """(doc, heading, text) for every ## / ### section of the docs."""
+    out = []
+    for rel in DOCS:
+        p = _doc_root() / rel
+        if not p.exists():
+            continue
+        head, buf = "(intro)", []
+        for line in p.read_text().splitlines():
+            if re.match(r"^#{2,3} ", line):
+                if buf:
+                    out.append((rel, head, "\n".join(buf).strip()))
+                head, buf = line.lstrip("# ").strip(), []
+            else:
+                buf.append(line)
+        if buf:
+            out.append((rel, head, "\n".join(buf).strip()))
+    return out
+
+
+def read_handbook(section: str = "") -> str:
+    """No section: the table of contents. Otherwise the best-matching section(s), in full."""
+    secs = handbook_sections()
+    if not secs:
+        return "The handbook isn't available in this container."
+    if not section.strip():
+        lines, last = [], None
+        for doc, head, _ in secs:
+            if doc != last:
+                lines.append(f"\n{doc}:"); last = doc
+            lines.append(f"  - {head}")
+        return "Sections (ask for one by name):" + "\n".join(lines)
+    words = [w for w in re.findall(r"[a-z0-9]+", section.lower()) if len(w) > 2] or [section.lower()]
+    def score(s):
+        doc, head, text = s
+        h, t = head.lower(), text.lower()
+        return sum(5 * (w in h) + min(t.count(w), 5) for w in words)
+    best = sorted(secs, key=score, reverse=True)
+    if score(best[0]) == 0:
+        return "No section matches that. Call read_handbook with no section to see the contents."
+    out, size = [], 0
+    for doc, head, text in best[:3]:
+        if score((doc, head, text)) == 0 or size > 9000:
+            break
+        chunk = f"## {head}  ({doc})\n{text}"[:7000]
+        out.append(chunk); size += len(chunk)
+    return "\n\n".join(out)

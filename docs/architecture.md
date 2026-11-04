@@ -395,6 +395,16 @@ have `search_past_chats` and `read_past_chat`.
 - Private rooms stay closed to him while he's on a cloud brain (finance only if `share_with_cloud`;
   Day Job and The Observer never). Spend goes through the ledger and stops at the monthly budget.
 
+## Milestone 24: The Wetworks handbook
+
+- `docs/handbook.md`: the full narrative (purpose, rules, hardware, system map, brains, every agent and room,
+  the Forge loop, console, schedule, operating commands, how to change Wetworks, build timeline, open items).
+- `config/knowledge/wetworks-handbook.md`: the same knowledge as ~75 short facts and decisions, loaded into
+  memory on start so agents recall them when relevant.
+- `read_handbook` tool (all agents; no private data): table of contents, or the best-matching sections of the
+  handbook, architecture doc, README and art spec. Docs and README are now copied into the image.
+- The Architect's and C.L.a.i.R's personas tell them to check it before explaining or changing Wetworks.
+
 ## Next milestones
 
 1. Claude powering the agents and the Code cell (Friday).

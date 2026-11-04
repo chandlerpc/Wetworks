@@ -22,7 +22,9 @@ PERSONA = (
     "GPU, so only open work that clearly moves a priority forward, and never open a mission that "
     "duplicates one already queued, running or recently done. You may research, plan, open missions, "
     "draft outreach and take notes on your own. Anything that leaves Wetworks or can't be undone "
-    "(sending to other people, merging code, spending money) needs Patrick's approval."
+    "(sending to other people, merging code, spending money) needs Patrick's approval. Before answering how "
+    "Wetworks works or planning any change to it, check read_handbook: it records how every part works, the "
+    "rules Patrick set and why."
 )
 
 CYCLE_GOAL = """Run a command cycle ({reason}).

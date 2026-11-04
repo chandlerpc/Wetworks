@@ -78,7 +78,7 @@ def drill_toolbox(real: Toolbox) -> Toolbox:
     return out
 
 
-READ_ONLY = {"content_ideas", "search_web", "read_page", "recall", "search_past_chats", "read_past_chat", "list_missions",
+READ_ONLY = {"content_ideas", "read_handbook", "search_web", "read_page", "recall", "search_past_chats", "read_past_chat", "list_missions",
              "get_mission", "recent_findings", "list_leads", "forge_status"}
 
 

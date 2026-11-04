@@ -160,6 +160,13 @@ def build_toolbox(*, llm, memory, missions, open_mission, findings, leads, reven
                    lambda title, angle="": (lambda p: f"Added idea #{p['id']}." if p else "Already have that idea.")(
                        content.add_idea(str(title), str(angle), source=agent_name))))
 
+    # ---- the handbook: how Wetworks works and why (no private data) --------------
+    from ..knowledge import read_handbook
+
+    t.add(Tool("read_handbook", "Read Wetworks' own docs: how every part works, the rules, decisions, history and "
+               "how to operate or change it. No section = table of contents.",
+               {"section": "(optional) a section name or topic, e.g. 'privacy', 'The Forge', 'schedule'"}, read_handbook))
+
     # ---- memory and time -------------------------------------------------------
     t.add(Tool("remember", "Save a durable fact Patrick stated (a preference, decision, project, person).",
                {"text": "one plain sentence", "kind": "(optional) preference | fact | project | person | decision"},
