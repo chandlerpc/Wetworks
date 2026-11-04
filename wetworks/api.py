@@ -56,7 +56,7 @@ def _iso(dt) -> str | None:
 
 def create_app(*, settings, architect, cells: dict, comms, events, scheduler=None,
                missions=None, open_mission=None, voice=None, leads=None, memory=None, approvals=None,
-               commander=None, forge=None, halt=None, finance=None) -> Starlette:
+               commander=None, forge=None, halt=None, finance=None, dayjob=None) -> Starlette:
     def run_bg(fn):
         threading.Thread(target=fn, daemon=True).start()
 
@@ -350,6 +350,86 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
             return JSONResponse({"error": "No such transaction."}, status_code=404)
         return JSONResponse(t)
 
+    # ---- Day Job (local only; work material, scrubbed of patient details) ---------------------
+    async def dayjob_overview(request: Request):
+        if dayjob is None:
+            return JSONResponse({"error": "Day Job isn't set up."}, status_code=503)
+        from .dayjob import PRODUCTS
+
+        status = request.query_params.get("status", "")
+        return JSONResponse({"counts": dayjob.counts(), "tickets": dayjob.tickets(status), "fixes": dayjob.fixes(50),
+                             "docs": dayjob.docs(), "products": PRODUCTS})
+
+    async def dayjob_new_ticket(request: Request):
+        if dayjob is None:
+            return JSONResponse({"error": "Day Job isn't set up."}, status_code=503)
+        body = await request.json()
+        try:
+            t, found = dayjob.new_ticket(str(body.get("text", "")), str(body.get("product", "Other")), str(body.get("ref", "")))
+        except ValueError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        events.add("dayjob", "info", f"New ticket #{t['id']} ({t['product']})"
+                   + (f"; removed {sum(found.values())} patient detail(s)" if found else ""))
+        if body.get("help", True) and "dayjob" in cells:
+            run_bg(lambda: cells["dayjob"].help(t["id"]))
+        return JSONResponse({"ticket": t, "removed": found})
+
+    async def dayjob_ticket(request: Request):
+        if dayjob is None:
+            return JSONResponse({"error": "Day Job isn't set up."}, status_code=503)
+        tid = int(request.path_params["tid"])
+        if request.method == "GET":
+            t = dayjob.ticket(tid)
+            return JSONResponse(t) if t else JSONResponse({"error": "No such ticket."}, status_code=404)
+        body = await request.json()
+        try:
+            if body.get("action") == "help" and "dayjob" in cells:
+                run_bg(lambda: cells["dayjob"].help(tid))
+                return JSONResponse({"ok": True}, status_code=202)
+            if body.get("status") == "solved":
+                t = dayjob.solve(tid, str(body.get("resolution", "")), str(body.get("title", "")), bool(body.get("save_fix", True)))
+                if t:
+                    events.add("dayjob", "done", f"Ticket #{tid} solved" + (" and saved as a fix" if t["fix_id"] else ""))
+            else:
+                t = dayjob.update_ticket(tid, status=body.get("status"))
+        except ValueError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        return JSONResponse(t) if t else JSONResponse({"error": "No such ticket."}, status_code=404)
+
+    async def dayjob_fix(request: Request):
+        if dayjob is None:
+            return JSONResponse({"error": "Day Job isn't set up."}, status_code=503)
+        b = await request.json()
+        try:
+            f = dayjob.add_fix(str(b.get("title", "")), str(b.get("symptoms", "")), str(b.get("steps", "")), str(b.get("product", "Other")))
+        except ValueError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        return JSONResponse(f)
+
+    async def dayjob_doc(request: Request):
+        if dayjob is None:
+            return JSONResponse({"error": "Day Job isn't set up."}, status_code=503)
+        from .dayjob import read_upload
+
+        if request.method == "DELETE":
+            return JSONResponse({"ok": dayjob.delete_doc(int(request.path_params["did"]))})
+        raw = await request.body()
+        name = request.query_params.get("name", "notes.txt")
+        if not raw or len(raw) > 15_000_000:
+            return JSONResponse({"error": "Send a file under 15 MB."}, status_code=400)
+        try:
+            text = await run_in_threadpool(read_upload, name, raw)
+            d = await run_in_threadpool(dayjob.add_doc, name, text)
+        except ValueError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        events.add("dayjob", "info", f"Added {name} to the Day Job library ({d['chunks']} sections)")
+        return JSONResponse(d)
+
+    async def dayjob_search(request: Request):
+        q = request.query_params.get("q", "")
+        return JSONResponse({"results": [{k: h[k] for k in ("kind", "ref", "title", "snippet")} for h in dayjob.search(q, 12)]
+                             if dayjob is not None else []})
+
     async def list_memory(request: Request):
         if memory is None:
             return JSONResponse({"memories": [], "count": 0})
@@ -435,7 +515,7 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
         state = await run_in_threadpool(lambda: floor_state(
             settings=settings, architect=architect, comms=comms, events=events, scheduler=scheduler, missions=missions,
             approvals=approvals, forge=forge, leads=getattr(comms, "leads", None), halt=halt,
-            finance=finance))
+            finance=finance, dayjob=dayjob))
         return JSONResponse(state)
 
     async def set_halt(request: Request):
@@ -482,6 +562,13 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
         Route("/api/finance/transactions/{tid:int}", finance_set, methods=["POST"]),
         Route("/api/finance/import", finance_import, methods=["POST"]),
         Route("/api/finance/imports/{bid:int}", finance_undo, methods=["DELETE"]),
+        Route("/api/dayjob", dayjob_overview, methods=["GET"]),
+        Route("/api/dayjob/tickets", dayjob_new_ticket, methods=["POST"]),
+        Route("/api/dayjob/tickets/{tid:int}", dayjob_ticket, methods=["GET", "POST"]),
+        Route("/api/dayjob/fixes", dayjob_fix, methods=["POST"]),
+        Route("/api/dayjob/docs", dayjob_doc, methods=["POST"]),
+        Route("/api/dayjob/docs/{did:int}", dayjob_doc, methods=["DELETE"]),
+        Route("/api/dayjob/search", dayjob_search, methods=["GET"]),
         Route("/api/approvals", list_approvals, methods=["GET"]),
         Route("/api/approvals/{aid:int}", decide_approval, methods=["POST"]),
         Route("/api/memory", list_memory, methods=["GET"]),

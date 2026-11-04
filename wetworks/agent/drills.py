@@ -46,6 +46,8 @@ SIMULATED = {
     "finance_summary": lambda: {"month": "sample", "spent_this_month": 1234.56, "by_category": [
         {"category": "Groceries", "spent": 410.0, "budget": 600}, {"category": "Dining", "spent": 285.0, "budget": 300}],
         "recurring_monthly_total": 96.4, "due_this_week": {"count": 2, "total": 61.98}, "categories_near_budget": ["Dining"]},
+    "dayjob_search": lambda query="": [{"kind": "fix", "title": "[NovaPACS] Sample: viewer won't load priors",
+                                        "snippet": "Sample fix text for practice only."}],
     "benchmark_model": lambda model="", dataset="agent-steps": f"Benchmark of {model} queued; results show in forge_status.",
 }
 

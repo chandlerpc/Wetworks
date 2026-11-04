@@ -8,7 +8,7 @@ from .runtime import Tool, Toolbox
 
 def build_toolbox(*, llm, memory, missions, open_mission, findings, leads, revenue, notify,
                   followups, workspace=None, agent_name="architect", daily_mission_cap=6, commander=None,
-                  finance=None, finance_level="none",
+                  finance=None, finance_level="none", dayjob=None, dayjob_local=False,
                   chats=None, forge=None) -> Toolbox:
     t = Toolbox()
 
@@ -124,6 +124,18 @@ def build_toolbox(*, llm, memory, missions, open_mission, findings, leads, reven
         t.add(Tool("finance_summary", "Patrick's money. Details stay on the MSI and aren't shared with you.",
                    {}, lambda: "Finance details stay on the MSI and aren't shared with cloud models. "
                                "Point Patrick to the Finance room in the console."))
+
+    # ---- day job (work material: local brains only, never cloud) ------------------
+    if dayjob is not None and dayjob_local:
+        t.add(Tool("dayjob_search", "Search Patrick's Novarad support notes and past fixes (titles and snippets).",
+                   {"query": "what to look for"},
+                   lambda query: [{"kind": h["kind"], "title": h["title"], "snippet": h["snippet"]} for h in dayjob.search(str(query))]
+                   or "Nothing in the library matches."))
+    elif dayjob is not None:
+        t.add(Tool("dayjob_search", "Patrick's Novarad support notes. They stay on the MSI and aren't shared with you.",
+                   {"query": "what to look for"},
+                   lambda query: "Day Job material stays on the MSI and isn't shared with cloud models. "
+                                 "Point Patrick to the Day Job room in the console."))
 
     # ---- memory and time -------------------------------------------------------
     t.add(Tool("remember", "Save a durable fact Patrick stated (a preference, decision, project, person).",

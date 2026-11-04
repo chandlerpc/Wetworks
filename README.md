@@ -118,6 +118,13 @@ On your bank's or card's website, download transactions as **CSV**, then in the 
 safe. Fix a category once and every charge from that merchant follows. The Bookkeeper sorts new
 merchants each morning and flags bills due this week, budgets near their limit, and new recurring charges.
 
+## Day Job
+
+A Novarad support helper that stays on the MSI and never touches Novarad systems. In **Day Job**, paste
+a ticket (patient details are stripped automatically, but leave names out when you can) and The
+Technician drafts the likely cause, steps, questions and a reply, using your own notes first. Add KB
+articles or notes with **Add file**; when you mark a ticket solved, what fixed it is saved for next time.
+
 ## The Forge (training)
 
 The Forge learns from lessons: decisions Gemini (and Claude, later) made while driving the agents.

@@ -325,11 +325,11 @@ input:focus, textarea:focus { border-color: var(--phosphor-dim); outline: none; 
 /* ---- Bottom tabs (phone) -------------------------------------------- */
 .tabs {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-  display: grid; grid-template-columns: repeat(6, 1fr);
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(64px, 1fr); overflow-x: auto; scrollbar-width: none;
   height: calc(var(--tabbar) + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom);
   background: rgba(10, 15, 11, 0.96); border-top: 1px solid var(--seam);
 }
-.tabs button { background: transparent; color: var(--fog); border: 0; border-radius: 0; font-size: 13px; padding: 0 1px; position: relative; }
+.tabs button { background: transparent; color: var(--fog); border: 0; border-radius: 0; font-size: 13px; padding: 0 6px; position: relative; white-space: nowrap; }
 .tabs button[aria-current="page"] { color: var(--phosphor); }
 .tabs button[aria-current="page"]::before { content: ""; position: absolute; top: 0; left: 30%; right: 30%; height: 2px; background: var(--phosphor); box-shadow: 0 0 8px var(--phosphor); }
 .tabs button:hover { filter: none; color: var(--paper); }
@@ -349,13 +349,14 @@ input:focus, textarea:focus { border-color: var(--phosphor-dim); outline: none; 
   .tabs { display: none; }
   .panes {
     display: grid; grid-template-columns: 1.05fr 1.2fr 1fr; gap: var(--s5) var(--s5); padding: var(--s5);
-    grid-template-areas: "ops comms intel" "missions comms leads" "missions comms finance"; align-items: start;
+    grid-template-areas: "ops comms intel" "missions comms leads" "missions comms finance" "missions comms dayjob"; align-items: start;
   }
   #pane-ops { grid-area: ops; }
   #pane-missions { grid-area: missions; padding-left: 0; border-left: 0; border-top: 1px solid var(--seam); padding-top: var(--s4); }
   #pane-comms { grid-area: comms; }
   #pane-intel { grid-area: intel; }
   #pane-leads { grid-area: leads; border-top: 1px solid var(--seam); padding-top: var(--s4); }
+  #pane-dayjob { grid-area: dayjob; border-top: 1px solid var(--seam); padding-top: var(--s4); }
   #pane-finance { grid-area: finance; border-top: 1px solid var(--seam); padding-top: var(--s4); }
   .pane, .pane.active { display: block; }
   .sheet { border-radius: 14px; border-bottom: 1px solid var(--seam); margin: auto; }
@@ -531,3 +532,19 @@ body.halted .topbar { box-shadow: inset 0 -2px 0 var(--signal); }
 .note.warn { color: var(--amber); }
 .fin-imports { margin-top: var(--s3); }
 .fin-imports summary { cursor: pointer; color: var(--fog); }
+
+/* ---- Day Job ---------------------------------------------------------- */
+.dj-new { display: grid; gap: var(--s2); margin: var(--s2) 0; }
+.dj-new textarea, .dj-ticket textarea { width: 100%; resize: vertical; }
+.dj-new button { justify-self: start; }
+.dj-row { display: flex; gap: var(--s2); align-items: center; }
+.dj-row input, .dj-row select { flex: 1; min-width: 0; min-height: 44px; font-size: 15px; }
+.dj-tickets { list-style: none; margin: 0; padding: 0; }
+.dj-ticket { padding: var(--s2) 0; border-bottom: 1px solid var(--seam); }
+.dj-ticket.solved { opacity: 0.75; }
+.dj-ticket.waiting .dj-head strong::after { content: " · waiting"; color: var(--amber); font-weight: 500; }
+.dj-head { display: grid; gap: 2px; }
+.dj-head strong { font-weight: 600; font-size: 15px; }
+.dj-ticket h4 { margin: var(--s3) 0 4px; font-size: 14px; color: var(--fog); }
+.dj-ticket ol, .dj-ticket ul { margin: 0 0 var(--s2); padding-left: 1.3em; }
+.dj-ticket details > button, .dj-ticket details > textarea { margin-top: var(--s2); }

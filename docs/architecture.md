@@ -336,6 +336,20 @@ have `search_past_chats` and `read_past_chat`.
 - Console: Finance tab (import, month vs budgets, due soon, recurring, transactions with category
   pickers, import history with undo). The Finance room on the Floor is unsealed.
 
+## Milestone 20: Day Job room unsealed (The Technician)
+
+- `wetworks/dayjob.py`: local SQLite + FTS5 library of Patrick's notes, KB files (text, Markdown, HTML,
+  CSV, email, PDF via pypdf) and fixes; tickets with status open / waiting / solved.
+- `scrub()` strips patient details (HIPAA) before anything is stored, searched or shown to a model:
+  labelled fields (Patient, DOB, MRN, accession...), DICOM LAST^FIRST names, "Patient First Last",
+  SSNs, phones, emails, DICOM UIDs, 7+ digit IDs, Mr./Dr. names. Tech details (hosts, IPs, KB numbers)
+  are kept. Pattern-based: a safety net, not a guarantee, so the UI asks Patrick to leave names out.
+- The Technician drafts help per ticket with the local model only: summary, likely cause, steps,
+  questions, a reply draft, and which library items it used. Solving a ticket saves the resolution as a
+  fix, so the library grows from real work. The brief gets counts only.
+- Cloud agents can't search it; local-brain agents get titles and snippets; drills see a sample.
+- Console Day Job tab; Day Job room unsealed on the Floor. Phone tabs now scroll.
+
 ## Next milestones
 
 1. Claude powering the agents and the Code cell (Friday).

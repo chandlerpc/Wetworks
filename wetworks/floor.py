@@ -12,7 +12,7 @@ ROOMS = [
     {"id": "codebay", "name": "Code Bay", "sealed": False},
     {"id": "forge", "name": "The Forge", "sealed": False},
     {"id": "archives", "name": "Archives", "sealed": False},
-    {"id": "dayjob", "name": "Day Job", "sealed": True},
+    {"id": "dayjob", "name": "Day Job", "sealed": False},
     {"id": "finance", "name": "Finance", "sealed": False},
     {"id": "gamedev", "name": "Game Dev", "sealed": True},
     {"id": "content", "name": "Content", "sealed": True},
@@ -24,7 +24,7 @@ def _iso(dt):
 
 
 def floor_state(*, settings, architect, comms, events, scheduler=None, missions=None, approvals=None, forge=None,
-                leads=None, halt=None, finance=None) -> dict:
+                leads=None, halt=None, finance=None, dayjob=None) -> dict:
     busy = set(events.busy)
     since = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
     recent = events.recent(limit=60)
@@ -88,6 +88,13 @@ def floor_state(*, settings, architect, comms, events, scheduler=None, missions=
                        "next": _iso(nxt.get("finance")), "last": last("finance"),
                        "money": {"due_this_week": len(finance.upcoming(7)), "uncategorized": len(finance.uncategorized_merchants(500)),
                                  "transactions": finance.count()}})
+
+    if dayjob is not None:
+        c = dayjob.counts()
+        agents.append({"id": "dayjob", "name": "The Technician", "role": "Sleeper", "room": "dayjob", "kind": "sleeper",
+                       "state": state("dayjob", sleeper=True), "vendor": "local", "model": local,
+                       "next": _iso(nxt.get("dayjob")), "last": last("dayjob"),
+                       "support": {"open": c.get("open", 0) + c.get("waiting", 0), "fixes": c.get("fixes", 0), "docs": c.get("docs", 0)}})
 
     forge_info = {}
     if forge is not None:

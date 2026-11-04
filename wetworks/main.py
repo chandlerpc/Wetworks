@@ -80,6 +80,11 @@ def build(settings):
 
     finance = Finance(settings.data_dir / "finance.db", settings.config_dir / "finance.toml")
     finance_cell = FinanceCell(ctx, finance)
+    from .cells.dayjob import DayJobCell
+    from .dayjob import DayJob
+
+    dayjob = DayJob(settings.data_dir / "dayjob.db")
+    dayjob_cell = DayJobCell(ctx, dayjob)
     architect.min_importance = int(intel.config.get("intel", {}).get("min_importance_for_brief", 2))
     missions = MissionStore(settings.data_dir / "missions.db")
     coder = Coder(ctx, missions,
@@ -104,6 +109,7 @@ def build(settings):
     revenue.open_mission = lambda title, request, source: open_mission(title, request, source)
     comms.leads = leads
     comms.finance = finance
+    comms.dayjob = dayjob
     learner = Learner(ctx, comms, missions)
 
     # ---- agents ----
@@ -121,7 +127,8 @@ def build(settings):
                             findings=architect.findings, leads=leads, revenue=revenue, notify=architect.notify,
                             followups=followups, workspace=coder.ws, daily_mission_cap=settings.agent_daily_missions,
                             chats=chats, forge=forge, finance=finance,
-                            finance_level=finance_level(settings, finance, cloud=settings.agent_brain != "local"))
+                            finance_level=finance_level(settings, finance, cloud=settings.agent_brain != "local"),
+                            dayjob=dayjob, dayjob_local=settings.agent_brain == "local")
     for name in ("merge_pull_request", "switch_local_model"):
         if name in toolbox.tools:
             approvals.executors[name] = toolbox.tools[name].fn
@@ -143,7 +150,8 @@ def build(settings):
                                 findings=architect.findings, leads=leads, revenue=revenue, notify=architect.notify,
                                 followups=followups, agent_name="clair", daily_mission_cap=settings.agent_daily_missions,
                                 commander=commander, chats=chats, finance=finance,
-                                finance_level=finance_level(settings, finance, cloud=True))
+                                finance_level=finance_level(settings, finance, cloud=True),
+                                dayjob=dayjob, dayjob_local=False)
     clair_brain = lambda: "gemini" if comms.clair_mode == "cloudflare" else default_brain()
     clair = ClairAgent(toolbox=clair_tools, ask=recorded(clair_ask(bridge, make_ask(settings, architect.llm, "clair"), clair_mode),
                                                          traces, "clair", clair_brain),
@@ -165,7 +173,7 @@ def build(settings):
                           architect_tools=toolbox, context_fn=architect.context_block, events=architect.events,
                           leads=leads, missions=missions, settings=settings, lessons_fn=forge.lessons)
     commander.halt = operator.halt = comms.halt = comms.drills.halt = halt
-    return architect, {"intel": intel, "revenue": revenue, "learner": learner, "finance": finance_cell}, comms
+    return architect, {"intel": intel, "revenue": revenue, "learner": learner, "finance": finance_cell, "dayjob": dayjob_cell}, comms
 
 
 def finance_level(settings, finance, cloud: bool) -> str:
@@ -248,6 +256,7 @@ def run() -> None:
                       lead_minutes=settings.intel_lead_minutes)
     sleepers.register(cells["revenue"], [settings.morning_brief], lead_minutes=settings.revenue_lead_minutes)
     sleepers.register(cells["finance"], [settings.morning_brief], lead_minutes=20)
+    sleepers.register(cells["dayjob"], [settings.morning_brief], lead_minutes=15)
     sleepers.register(cells["learner"], [settings.learner_time])
     sched.add_job(comms.forge.tick, "interval", minutes=5, id="forge_tick", max_instances=1, coalesce=True)
     sched.add_job(comms.drills.tick, "interval", minutes=max(5, settings.drill_every_minutes), id="drill_tick",
@@ -292,7 +301,7 @@ def run() -> None:
                      open_mission=comms.open_mission_fn, voice=Voice(settings, architect.ledger,
                                                                  vocab_fn=lambda: [l["business"] for l in comms.leads.recent(limit=12)]), leads=comms.leads,
                      memory=comms.memory, approvals=comms.approvals, commander=comms.commander, forge=comms.forge,
-                     halt=comms.halt, finance=comms.finance)
+                     halt=comms.halt, finance=comms.finance, dayjob=comms.dayjob)
     log.info("Console listening on port %d", settings.console_port)
     uvicorn.run(app, host="0.0.0.0", port=settings.console_port, log_level="warning")
     sched.shutdown(wait=False)

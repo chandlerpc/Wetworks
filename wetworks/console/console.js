@@ -657,6 +657,132 @@
     });
   }
 
+  // ---- Day Job (local only) -------------------------------------------
+  let djFilter = "open", djProducts = [];
+  const djOpen = new Set();
+  async function loadDayJob() {
+    const d = await api(`/api/dayjob${djFilter ? `?status=${djFilter}` : ""}`);
+    if (!djProducts.length) {
+      djProducts = d.products;
+      ["#dj-product", "#dj-fix-product"].forEach((sel) => { const s = $(sel); djProducts.forEach((p) => { const o = el("option", null, p); o.value = p; s.append(o); }); });
+    }
+    const chips = $("#dj-filter");
+    if (!chips.children.length) {
+      [["open", "Open"], ["waiting", "Waiting"], ["solved", "Solved"], ["", "All"]].forEach(([k, label]) => {
+        const b = el("button", "chip", label); b.type = "button"; b.dataset.k = k;
+        b.addEventListener("click", () => { djFilter = k; safe(loadDayJob)(); });
+        chips.append(b);
+      });
+    }
+    $$("#dj-filter .chip").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.k === djFilter)));
+    const c = d.counts, open = (c.open || 0) + (c.waiting || 0);
+    const tab = $(".tabs button[data-pane=dayjob]"); if (tab) tab.textContent = open ? `Day Job (${open})` : "Day Job";
+    $("#dj-lib-count").textContent = `· ${c.fixes || 0} fixes, ${c.docs || 0} files`;
+    const ul = $("#dj-tickets"); ul.replaceChildren();
+    if (!d.tickets.length) ul.append(el("li", "note", djFilter === "open" ? "No open tickets." : "Nothing here."));
+    d.tickets.forEach((t) => ul.append(ticketItem(t)));
+    const docs = $("#dj-docs"); docs.replaceChildren();
+    d.docs.forEach((doc) => {
+      const li = el("li"); li.append(el("span", null, `${doc.name} · ${doc.chunks} sections${doc.scrubbed ? ` · ${doc.scrubbed} details removed` : ""}`), el("span", "muted", ago(doc.ts)));
+      const x = el("button", "ghost small", "Remove"); x.type = "button";
+      x.addEventListener("click", async () => { x.disabled = true; await api(`/api/dayjob/docs/${doc.id}`, { method: "DELETE" }); safe(loadDayJob)(); });
+      li.append(x); docs.append(li);
+    });
+  }
+  function ticketItem(t) {
+    const li = el("li", `dj-ticket ${t.status}`);
+    const head = el("div", "dj-head");
+    const first = t.text.trim().split("\n")[0];
+    head.append(el("strong", null, `#${t.id}${t.ref ? ` (${t.ref})` : ""} ${first.length > 80 ? first.slice(0, 80) + "…" : first}`),
+      el("span", "muted", `${t.product} · ${ago(t.ts)}`));
+    li.append(head);
+    const det = el("details"); det.open = djOpen.has(t.id);
+    det.addEventListener("toggle", () => (det.open ? djOpen.add(t.id) : djOpen.delete(t.id)));
+    let help = null; try { help = t.help ? JSON.parse(t.help) : null; } catch {}
+    det.append(el("summary", null, help ? "Help" : (t.status === "solved" ? "Details" : "Working on it…")));
+    det.append(el("div", "draft", t.text));
+    if (help) {
+      if (help.summary) det.append(el("p", null, help.summary));
+      if (help.likely_cause) { det.append(el("h4", null, "Likely cause")); det.append(el("p", null, help.likely_cause)); }
+      if ((help.steps || []).length) { det.append(el("h4", null, "Steps")); const ol = el("ol"); help.steps.forEach((x) => ol.append(el("li", null, x))); det.append(ol); }
+      if ((help.ask_customer || []).length) { det.append(el("h4", null, "Ask them")); const ul2 = el("ul"); help.ask_customer.forEach((x) => ul2.append(el("li", null, x))); det.append(ul2); }
+      if (help.reply) {
+        det.append(el("h4", null, "Reply draft")); det.append(el("div", "draft", help.reply));
+        const cp = el("button", "small", "Copy reply"); cp.type = "button";
+        cp.addEventListener("click", async () => { try { await navigator.clipboard.writeText(help.reply); cp.textContent = "Copied"; } catch { cp.textContent = "Select and copy"; } setTimeout(() => (cp.textContent = "Copy reply"), 2000); });
+        det.append(cp);
+      }
+      if ((help.sources || []).length) det.append(el("p", "note", "From your library: " + help.sources.map((x) => x.title).join(" · ")));
+    }
+    if (t.status === "solved") {
+      if (t.resolution) { det.append(el("h4", null, "What fixed it")); det.append(el("div", "draft", t.resolution)); }
+    } else {
+      const row = el("div", "lead-actions");
+      const again = el("button", "ghost small", "Try again"); again.type = "button";
+      again.addEventListener("click", async () => { again.disabled = true; await api(`/api/dayjob/tickets/${t.id}`, { method: "POST", body: JSON.stringify({ action: "help" }) }); pollDayJob(); });
+      const wait = el("button", "ghost small", t.status === "waiting" ? "Back to open" : "Waiting on them"); wait.type = "button";
+      wait.addEventListener("click", async () => { await api(`/api/dayjob/tickets/${t.id}`, { method: "POST", body: JSON.stringify({ status: t.status === "waiting" ? "open" : "waiting" }) }); safe(loadDayJob)(); });
+      row.append(again, wait); det.append(row);
+      const res = el("textarea"); res.rows = 2; res.placeholder = "What fixed it (saved to your library for next time)";
+      res.setAttribute("aria-label", `Resolution for ticket ${t.id}`);
+      const done = el("button", "small", "Mark solved"); done.type = "button";
+      done.addEventListener("click", async () => {
+        done.disabled = true;
+        try { await api(`/api/dayjob/tickets/${t.id}`, { method: "POST", body: JSON.stringify({ status: "solved", resolution: res.value, save_fix: !!res.value.trim() }) }); safe(loadDayJob)(); }
+        catch (err) { if (err.message !== "unauthorized") alert(err.message); done.disabled = false; }
+      });
+      det.append(res, done);
+    }
+    li.append(det);
+    return li;
+  }
+  let djPoll = 0;
+  function pollDayJob() { clearInterval(djPoll); let n = 0; djPoll = setInterval(() => { safe(loadDayJob)(); if (++n > 20) clearInterval(djPoll); }, 4000); }
+  function bindDayJob() {
+    $("#dj-new").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const note = $("#dj-note"), text = $("#dj-text").value.trim();
+      if (!text) return;
+      note.textContent = "Saving…"; note.className = "note";
+      try {
+        const r = await api("/api/dayjob/tickets", { method: "POST", body: JSON.stringify({ text, product: $("#dj-product").value, ref: $("#dj-ref").value }) });
+        const n = Object.values(r.removed || {}).reduce((a, b) => a + b, 0);
+        note.textContent = `Ticket #${r.ticket.id} saved${n ? `; removed ${n} patient detail${n > 1 ? "s" : ""} (${Object.keys(r.removed).join(", ")})` : ""}. The Technician is drafting help.`;
+        $("#dj-text").value = ""; $("#dj-ref").value = ""; djOpen.add(r.ticket.id); djFilter = "open";
+        safe(loadDayJob)(); pollDayJob();
+      } catch (err) { note.textContent = err.message; note.className = "note err"; }
+    });
+    $("#dj-search").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const q = $("#dj-q").value.trim(), ul = $("#dj-results"); ul.replaceChildren();
+      if (!q) return;
+      const { results } = await api(`/api/dayjob/search?q=${encodeURIComponent(q)}`);
+      if (!results.length) ul.append(el("li", "note", "Nothing matches yet."));
+      results.forEach((h) => { const li = el("li"); li.append(el("span", "muted", h.kind), el("span", null, `${h.title}: ${h.snippet}`)); ul.append(li); });
+    });
+    $("#dj-file").addEventListener("change", async () => {
+      const f = $("#dj-file").files[0]; if (!f) return;
+      const note = $("#dj-note"); note.textContent = `Adding ${f.name}…`; note.className = "note";
+      try {
+        const d = await api(`/api/dayjob/docs?name=${encodeURIComponent(f.name)}`, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: f });
+        const n = Object.values(d.scrubbed || {}).reduce((a, b) => a + b, 0);
+        note.textContent = `Added ${f.name} (${d.chunks} sections${n ? `, ${n} patient details removed` : ""}).`;
+        safe(loadDayJob)();
+      } catch (err) { note.textContent = err.message; note.className = "note err"; }
+      $("#dj-file").value = "";
+    });
+    $("#dj-fix").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      try {
+        await api("/api/dayjob/fixes", { method: "POST", body: JSON.stringify({ title: $("#dj-fix-title").value, product: $("#dj-fix-product").value,
+          symptoms: $("#dj-fix-symptoms").value, steps: $("#dj-fix-steps").value }) });
+        ["#dj-fix-title", "#dj-fix-symptoms", "#dj-fix-steps"].forEach((x) => ($(x).value = ""));
+        $("#dj-note").textContent = "Fix saved to the library."; $("#dj-note").className = "note";
+        safe(loadDayJob)();
+      } catch (err) { $("#dj-note").textContent = err.message; $("#dj-note").className = "note err"; }
+    });
+  }
+
   // ---- Actions --------------------------------------------------------
   async function runAction(btn) {
     const note = $("#action-note");
@@ -710,9 +836,9 @@
     showPane(store.get("wetworks.pane") || "ops");
     selectChannel(channel);
     const s = safe(loadStatus), ev = safe(loadEvents), m = safe(loadMessages), f = safe(loadFindings), mi = safe(loadMissions), le = safe(loadLeads);
-    s(); ev(); f(); mi(); le(); safe(loadMemory)(); safe(loadFinance)();
+    s(); ev(); f(); mi(); le(); safe(loadMemory)(); safe(loadFinance)(); safe(loadDayJob)();
     const ap = safe(loadApprovals); ap(); timers.push(setInterval(ap, 10000));
-    timers.push(setInterval(le, 30000), setInterval(safe(loadFinance), 60000));
+    timers.push(setInterval(le, 30000), setInterval(safe(loadFinance), 60000), setInterval(safe(loadDayJob), 30000));
     if (window.WWVoice) window.WWVoice.init();
     if (window.WWFloor) {
       window.WWFloor.toTactical = (pane, channel, missionId) => {
@@ -786,6 +912,7 @@
   $("#mem-add").addEventListener("submit", addMemory);
   $("#fin-import").addEventListener("submit", (e) => e.preventDefault());
   bindFinance();
+  bindDayJob();
   $("#mem-search").addEventListener("submit", (e) => { e.preventDefault(); safe(loadMemory)(); });
   let memT = null;
   $("#mem-q").addEventListener("input", () => { clearTimeout(memT); memT = setTimeout(() => safe(loadMemory)(), 300); });

@@ -32,7 +32,7 @@ def test_floor_feed_shape(tmp_path):
     ids = {a["id"] for a in d["agents"]}
     assert {"architect", "clair", "intel", "revenue", "learner"} <= ids
     rooms = {r["id"]: r for r in d["rooms"]}
-    assert rooms["forge"]["sealed"] is False and rooms["finance"]["sealed"] is False and rooms["dayjob"]["sealed"] is True
+    assert rooms["forge"]["sealed"] is False and rooms["finance"]["sealed"] is False and rooms["dayjob"]["sealed"] is False and rooms["gamedev"]["sealed"] is True
     assert all(a["room"] in rooms for a in d["agents"])
     assert d["hud"]["halted"] is False and "spend" in d["hud"] and "budget" in d["hud"]
 

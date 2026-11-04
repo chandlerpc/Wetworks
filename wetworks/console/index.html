@@ -223,6 +223,41 @@
       <details class="fin-imports"><summary>Imports</summary><ul id="fin-batches" class="fin-list"></ul></details>
     </section>
 
+    <!-- Day Job: local only -->
+    <section id="pane-dayjob" class="pane" aria-labelledby="dayjob-h">
+      <h2 id="dayjob-h">Day Job</h2>
+      <p class="note">Stays on the MSI; only the local model reads it. Patient details are stripped before anything is saved,
+        but leave names out when you can. Nothing here touches Novarad systems.</p>
+      <form id="dj-new" class="dj-new">
+        <div class="dj-row">
+          <select id="dj-product" aria-label="Product"></select>
+          <input id="dj-ref" type="text" placeholder="Ticket # (optional)" aria-label="Ticket number" autocomplete="off">
+        </div>
+        <textarea id="dj-text" rows="4" placeholder="Paste the ticket or describe the problem…" aria-label="Ticket text"></textarea>
+        <button type="submit" class="small">Get help</button>
+      </form>
+      <p id="dj-note" class="note"></p>
+      <h3 class="fin-h">Tickets</h3>
+      <div id="dj-filter" class="chips" role="group" aria-label="Filter tickets"></div>
+      <ul id="dj-tickets" class="dj-tickets"></ul>
+      <h3 class="fin-h">Library <span id="dj-lib-count" class="muted"></span></h3>
+      <form id="dj-search" class="dj-row">
+        <input id="dj-q" type="search" placeholder="Search notes and fixes" aria-label="Search the library">
+        <label class="ghost small file-btn">Add file<input id="dj-file" type="file" accept=".txt,.md,.html,.htm,.csv,.pdf,.eml,.log,.json" hidden></label>
+      </form>
+      <ul id="dj-results" class="fin-list"></ul>
+      <details class="fin-imports"><summary>Add a fix by hand</summary>
+        <form id="dj-fix" class="dj-new">
+          <div class="dj-row"><select id="dj-fix-product" aria-label="Product"></select>
+            <input id="dj-fix-title" type="text" placeholder="Title, e.g. Priors not loading after upgrade" aria-label="Fix title"></div>
+          <textarea id="dj-fix-symptoms" rows="2" placeholder="Symptoms" aria-label="Symptoms"></textarea>
+          <textarea id="dj-fix-steps" rows="3" placeholder="What fixed it" aria-label="Steps"></textarea>
+          <button type="submit" class="ghost small">Save fix</button>
+        </form>
+      </details>
+      <details class="fin-imports"><summary>Files in the library</summary><ul id="dj-docs" class="fin-list"></ul></details>
+    </section>
+
     <!-- Intel: findings -->
     <section id="pane-intel" class="pane" aria-labelledby="intel-h">
       <h2 id="intel-h">Intel</h2>
@@ -238,6 +273,7 @@
     <button type="button" data-pane="intel">Intel</button>
     <button type="button" data-pane="leads">Leads</button>
     <button type="button" data-pane="finance">Finance</button>
+    <button type="button" data-pane="dayjob">Day Job</button>
   </nav>
 
   <!-- Mission detail -->
