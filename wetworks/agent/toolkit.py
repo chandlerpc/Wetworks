@@ -160,6 +160,22 @@ def build_toolbox(*, llm, memory, missions, open_mission, findings, leads, reven
                    lambda title, angle="": (lambda p: f"Added idea #{p['id']}." if p else "Already have that idea.")(
                        content.add_idea(str(title), str(angle), source=agent_name))))
 
+    # ---- second opinion from another vendor's model ---------------------------------
+    router = getattr(llm, "router", None)
+    if router is not None:
+        def second_opinion(work, what="a plan", author="claude"):
+            from ..models import BRAIN, review
+
+            vendor = {b: v for v, b in BRAIN.items()}.get(str(author), str(author))
+            try:
+                return review(router, str(what), str(work), vendor, agent=f"review:{agent_name}")
+            except Exception as e:
+                return f"No second opinion available: {e}"
+        t.add(Tool("second_opinion", "Have a model from a different AI company check important work (a plan, a draft, "
+                   "a recommendation) before it goes to Patrick. Costs a few cents; use it for things that matter.",
+                   {"work": "the full text to check", "what": "what it is and what it's for",
+                    "author": "(optional) who wrote it: claude | openai | gemini | grok | local"}, second_opinion))
+
     # ---- the handbook: how Wetworks works and why (no private data) --------------
     from ..knowledge import read_handbook
 

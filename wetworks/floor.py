@@ -46,8 +46,9 @@ def floor_state(*, settings, architect, comms, events, scheduler=None, missions=
     paused = llm.paused.is_set()
     halted = bool(halt and halt.is_set())
     local = llm.ollama.model
-    arch_claude = settings.architect_brain_effective == "claude-api"
-    brain = f"Claude ({settings.model_think})" if arch_claude else local
+    arch_claude = settings.architect_brain_effective in ("claude-api", "cloud")
+    router = getattr(architect.llm, "router", None)
+    brain = (f"{router.pick('plan') or 'local'} (chat) · {router.pick('reason') or 'local'} (check-ins)" if router else "Claude") if arch_claude else local
 
     def state(source, sleeper=False):
         if source in errored:

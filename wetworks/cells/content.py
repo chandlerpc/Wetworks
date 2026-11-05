@@ -98,11 +98,29 @@ class ContentCell(Cell):
                 text = self._ask(f"content:draft:{ch}", DRAFT.format(format=FORMATS[ch], title=p["title"], angle=p["angle"] or "(none given)",
                                                                      voice=cfg.get("voice", "")), 700)
                 self.content.set_draft(pid, ch, text)
+        self.content.set_review(pid, {})  # the old review was for the old drafts
+        p = self.content.get(pid)
+        self._second_opinion(p)
         p = self.content.get(pid)
         if self.ctx.events is not None:
             self.ctx.events.add("content", "warn" if p["flags"] else "done",
                                 f"Drafted “{p['title'][:60]}”" + (f" (check it: mentions {p['flags']})" if p["flags"] else ""))
         return p
+
+    def _second_opinion(self, p: dict) -> None:
+        """Another vendor's model reads the main draft. Drafts flagged for private words never leave the MSI."""
+        router = getattr(self.ctx.llm, "router", None)
+        main = next((p["drafts"][c] for c in ("linkedin", "blog", "x", "portfolio") if p["drafts"].get(c)), "")
+        if not main or p["flags"] or router is None or self.ctx.settings.dry_run or not router.pick("review", exclude_vendor="local"):
+            return
+        from ..models import review
+
+        try:
+            self.content.set_review(p["id"], review(router, "a social post Patrick may publish under his own name", main, "local",
+                                                    context=f"Voice he wants: {self.content.config().get('voice', '')[:400]}",
+                                                    agent=f"review:content:{p['id']}"))
+        except Exception as e:
+            self.log.info("No second opinion for idea #%s: %s", p["id"], e)
 
     def run(self) -> list:
         cfg = self.content.config()

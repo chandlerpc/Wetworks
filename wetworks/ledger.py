@@ -12,7 +12,7 @@ PRICES: dict[str, tuple[float, float]] = {
 }
 
 # USD per web search call.
-SEARCH_PRICE = {"claude": 0.01, "grok": 0.01}
+SEARCH_PRICE = {"claude": 0.01, "grok": 0.005}  # xAI: $5 per 1,000 searches
 
 
 def cost_usd(model: str, input_tokens: int, output_tokens: int) -> float:

@@ -5,10 +5,17 @@ from typing import Callable
 Ask = Callable[[str, str, int], str]
 
 
+ROLE_FOR_TIER = {"think": "plan", "work": "reason", "route": "bulk"}
+
+
 def make_ask(settings, llm, agent: str = "agent", brain: str | None = None, tier: str = "think") -> Ask:
-    """The default brain: the free local model, or Claude when the brain is claude-api."""
+    """The default brain: the free local model, or the cloud models (config/models.toml) when the brain is
+    claude-api / cloud: think = the "plan" role (Opus first), work = "reason" (Sonnet first)."""
     def ask(system: str, prompt: str, max_tokens: int) -> str:
-        if (brain or settings.agent_brain) == "claude-api":
+        if (brain or settings.agent_brain) in ("claude-api", "cloud"):
+            router = getattr(llm, "router", None)
+            if router is not None:
+                return router.ask(ROLE_FOR_TIER.get(tier, "reason"), agent, prompt, system=system, max_tokens=max_tokens).text
             return llm.ask(agent, prompt, tier=tier, system=system, max_tokens=max_tokens).text
         return llm.ask_local(agent, prompt, system=system, json_mode=True, max_tokens=max_tokens).text
     return ask

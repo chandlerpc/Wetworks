@@ -199,7 +199,7 @@ def test_architect_can_think_on_claude_while_cells_stay_local(tmp_path):
     from wetworks.config import Settings
     from wetworks.main import build
 
-    s = Settings(dry_run=True, data_dir=tmp_path, config_dir="config", architect_brain="claude-api")
+    s = Settings(dry_run=True, data_dir=tmp_path, config_dir="config", architect_brain="claude-api", anthropic_api_key="test-key")
     architect, cells, comms = build(s)
     c = comms.commander
     assert (c.max_steps, c.chat_steps, c.step_tokens, c.uses_gpu) == (14, 10, 3500, False)
@@ -216,7 +216,7 @@ def test_checkins_twice_a_day_on_sonnet_and_only_major_events_jump_the_queue(tmp
     from wetworks.findings import Finding
     from wetworks.main import build
 
-    s = Settings(dry_run=True, data_dir=tmp_path, config_dir="config", architect_brain="claude-api")
+    s = Settings(dry_run=True, data_dir=tmp_path, config_dir="config", architect_brain="claude-api", anthropic_api_key="test-key")
     architect, cells, comms = build(s)
     c = comms.commander
     assert c.cycle_ask("sys", "hi", 20).startswith("[dry-run claude-sonnet-5-5]")   # check-ins on Sonnet

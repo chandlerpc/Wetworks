@@ -59,6 +59,33 @@
   }
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
+  // A second opinion from another AI company's model, shown under a draft
+  function reviewBox(r) {
+    if (typeof r === "string") { try { r = r ? JSON.parse(r) : null; } catch { r = null; } }
+    if (!r || !r.verdict) return null;
+    const label = { ok: "Second opinion: looks good", fix: "Second opinion: worth a tweak", stop: "Second opinion: don't use this" }[r.verdict];
+    const box = el("div", `review rv-${r.verdict}`);
+    box.append(el("strong", null, label), el("span", "muted", ` · ${r.reviewer}`));
+    if (r.issues && r.issues.length) { const ul = el("ul"); r.issues.forEach((i) => ul.append(el("li", null, i))); box.append(ul); }
+    if (r.suggestion) box.append(el("p", null, `Try: ${r.suggestion}`));
+    return box;
+  }
+
+  // Spend per AI company this month, from the model router
+  async function loadModels() {
+    const box = $("#ro-vendors");
+    if (!box) return;
+    let m;
+    try { m = await api("/api/models"); } catch { box.replaceChildren(); return; }
+    const NAME = { anthropic: "Claude", openai: "OpenAI", xai: "Grok", google: "Gemini" };
+    box.replaceChildren(...Object.entries(m.vendors).map(([v, x]) => {
+      const row = el("div", "ro-vendor" + (x.key ? "" : " off"));
+      row.title = x.key ? `${NAME[v] || v}: $${x.spent.toFixed(2)} of $${x.cap.toFixed(0)} this month` : `${NAME[v] || v}: no API key yet`;
+      row.append(el("span", null, NAME[v] || v), el("span", "mono", x.key ? `$${x.spent.toFixed(2)} / ${x.cap.toFixed(0)}` : "no key"));
+      return row;
+    }));
+  }
+
   // ---- Status ---------------------------------------------------------
   async function loadStatus() {
     const s = await api("/api/status");
@@ -68,6 +95,7 @@
     const bar = $("#ro-spend-bar");
     bar.style.width = `${pct}%`;
     bar.className = pct >= 100 ? "over" : pct >= 80 ? "warn" : "";
+    loadModels();
 
     const free = s.provider === "local";
     $("#ro-model").textContent = free ? `${s.model} · free` : `${s.model} · paid`;
@@ -531,6 +559,8 @@
     det.open = isOpen;
     det.append(el("summary", null, l.draft ? "Outreach draft" : "Write an outreach draft"));
     if (l.draft) det.append(el("div", "draft", l.draft));
+    const lrv = l.draft && reviewBox(l.review);
+    if (lrv) det.append(lrv);
     const row = el("div", "lead-actions");
     if (l.draft) {
       const copy = el("button", "small", "Copy draft"); copy.type = "button";
@@ -902,6 +932,8 @@
     const det = el("details"); det.open = ctOpen.has(p.id);
     det.addEventListener("toggle", () => (det.open ? ctOpen.add(p.id) : ctOpen.delete(p.id)));
     det.append(el("summary", null, Object.keys(p.drafts).length ? "Drafts" : "Idea"));
+    const prv = reviewBox(p.review);
+    if (prv) det.append(prv);
     if (p.angle) det.append(el("p", "note", p.angle));
     const chans = Object.keys(ctChannels);
     if (Object.keys(p.drafts).length) {

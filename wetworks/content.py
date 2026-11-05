@@ -28,6 +28,8 @@ class Content:
                 drafts TEXT NOT NULL DEFAULT '{}', planned TEXT NOT NULL DEFAULT '', channel TEXT NOT NULL DEFAULT '',
                 posted_url TEXT NOT NULL DEFAULT '', flags TEXT NOT NULL DEFAULT '');
         """)
+        if "review" not in {r[1] for r in self.db.execute("PRAGMA table_info(pieces)")}:
+            self.db.execute("ALTER TABLE pieces ADD COLUMN review TEXT NOT NULL DEFAULT ''")
         self.db.commit()
 
     def config(self) -> dict:
@@ -40,12 +42,18 @@ class Content:
         return [c for c in self.config().get("channels", list(CHANNELS)) if c in CHANNELS]
 
     KEYS = ("id", "created", "updated", "title", "angle", "source", "pillar", "status", "drafts", "planned", "channel",
-            "posted_url", "flags")
+            "posted_url", "flags", "review")
 
     def _row(self, r) -> dict:
         d = dict(zip(self.KEYS, r))
         d["drafts"] = json.loads(d["drafts"] or "{}")
+        d["review"] = (json.loads(d["review"]) or None) if d.get("review") else None
         return d
+
+    def set_review(self, pid: int, review: dict) -> None:
+        with self.lock:
+            self.db.execute("UPDATE pieces SET review = ? WHERE id = ?", (json.dumps(review), pid))
+            self.db.commit()
 
     def get(self, pid: int) -> dict | None:
         r = self.db.execute(f"SELECT {', '.join(self.KEYS)} FROM pieces WHERE id = ?", (pid,)).fetchone()

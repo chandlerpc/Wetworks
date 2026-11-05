@@ -7,6 +7,8 @@
 #   queries     search terms for the free local search (SearXNG); 2-3 is plenty
 #   time_range  how fresh results must be: day | week | month
 #   searches    max web searches per run when a paid provider is used (about $0.01 each)
+#   live        true = search the web and X live with Grok (config/models.toml "live" role) when an
+#               xAI key is set; otherwise the topic runs the usual free way
 
 [intel]
 trial_start = "2026-11-03"   # 2-week trial; The Architect reviews it after
@@ -14,6 +16,7 @@ min_importance_for_brief = 2
 
 [[topics]]
 name = "AI models & tools"
+live = true
 queries = ["new AI model release", "LLM API pricing change", "AI agent framework release"]
 time_range = "week"
 enabled = true
@@ -27,6 +30,7 @@ Prioritise anything that changes what Wetworks should use or what it costs to ru
 
 [[topics]]
 name = "Money opportunities"
+live = true
 queries = ["small business AI automation demand", "Orlando small business AI software", "solo developer SaaS revenue"]
 time_range = "week"
 enabled = true

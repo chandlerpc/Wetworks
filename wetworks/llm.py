@@ -176,9 +176,11 @@ class LLM:
         cost = self.ledger.record(agent, model, tin, tout, extra_usd=searches * SEARCH_PRICE["claude"])
         return Reply(text=text, model=model, cost_usd=cost, searches=searches)
 
-    def _search_grok(self, agent, prompt, *, system) -> Reply:
+    def _search_grok(self, agent, prompt, *, system, model: str | None = None) -> Reply:
+        router = getattr(self, "router", None)
+        model = model or (router.pick("live") if router else None) or self.s.grok_model
         body = {
-            "model": self.s.grok_model,
+            "model": model,
             "input": ([{"role": "system", "content": system}] if system else [])
             + [{"role": "user", "content": prompt}],
             "tools": [{"type": "web_search"}, {"type": "x_search"}],
@@ -203,7 +205,8 @@ class LLM:
         searches = sum(1 for item in data.get("output", []) if item.get("type", "").endswith("search_call"))
         usage = data.get("usage", {})
         tin, tout = int(usage.get("input_tokens", 0)), int(usage.get("output_tokens", 0))
-        cost = (tin * self.s.grok_price_in + tout * self.s.grok_price_out) / 1_000_000
+        pin, pout = router.price(model) if router else (self.s.grok_price_in, self.s.grok_price_out)
+        cost = (tin * pin + tout * pout) / 1_000_000
         cost += searches * SEARCH_PRICE["grok"]
-        self.ledger.record_cost(agent, self.s.grok_model, tin, tout, cost)
-        return Reply(text=text, model=self.s.grok_model, cost_usd=cost, searches=searches)
+        self.ledger.record_cost(agent, model, tin, tout, cost)
+        return Reply(text=text, model=model, cost_usd=cost, searches=searches)

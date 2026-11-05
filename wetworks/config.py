@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     # Secrets. ANTHROPIC_API_KEY / XAI_API_KEY are also read without the prefix.
     anthropic_api_key: str = ""
     xai_api_key: str = ""
+    openai_api_key: str = ""
+    gemini_api_key: str = ""
     discord_webhook_url: str = ""
 
     # Behaviour
@@ -136,4 +138,10 @@ def load_settings() -> Settings:
     s.github_token = tidy(s.github_token)
     if not s.xai_api_key:
         s.xai_api_key = os.environ.get("XAI_API_KEY", "")
+    if not s.openai_api_key:
+        s.openai_api_key = os.environ.get("OPENAI_API_KEY", "")
+    if not s.gemini_api_key:
+        s.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
+    for k in ("anthropic_api_key", "xai_api_key", "openai_api_key", "gemini_api_key"):
+        setattr(s, k, tidy(getattr(s, k)))
     return s

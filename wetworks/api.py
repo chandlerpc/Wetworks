@@ -559,6 +559,12 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
             events.add("content", "done", f"Posted: {p['title'][:80]}")
         return JSONResponse(p) if p else JSONResponse({"error": "No such idea."}, status_code=404)
 
+    async def models_status(request: Request):
+        router = getattr(architect.llm, "router", None)
+        if router is None:
+            return JSONResponse({"error": "Model router isn't set up."}, status_code=503)
+        return JSONResponse(await run_in_threadpool(router.status))
+
     async def list_memory(request: Request):
         if memory is None:
             return JSONResponse({"memories": [], "count": 0})
@@ -709,6 +715,7 @@ def create_app(*, settings, architect, cells: dict, comms, events, scheduler=Non
         Route("/api/content", content_overview, methods=["GET"]),
         Route("/api/content/ideas", content_idea, methods=["POST"]),
         Route("/api/content/{pid:int}", content_piece, methods=["POST"]),
+        Route("/api/models", models_status, methods=["GET"]),
         Route("/api/approvals", list_approvals, methods=["GET"]),
         Route("/api/approvals/{aid:int}", decide_approval, methods=["POST"]),
         Route("/api/memory", list_memory, methods=["GET"]),

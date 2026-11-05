@@ -74,9 +74,12 @@ class Splinter:
         self.store = store
 
     # -- model helper: free local by default, paid only if the provider says so --
-    def _ask(self, mid: int, prompt: str, json_mode: bool, max_tokens: int) -> str:
+    def _ask(self, mid: int, prompt: str, json_mode: bool, max_tokens: int, role: str = "") -> str:
         llm = self.ctx.llm
         agent = f"splinter:{mid}"
+        router = getattr(llm, "router", None)
+        if role and router is not None and router.pick(role):  # e.g. write-ups on Gemini Flash; falls back to local
+            return router.ask(role, agent, prompt, system=SYSTEM, json_mode=json_mode, max_tokens=max_tokens).text
         if self.ctx.settings.provider == "local":
             return llm.ask_local(agent, prompt, system=SYSTEM, json_mode=json_mode, max_tokens=max_tokens).text
         return llm.ask(agent, prompt, tier="work", system=SYSTEM, max_tokens=max_tokens).text
@@ -194,7 +197,7 @@ class Splinter:
         text = self._ask(mid, WRITE_PROMPT.format(title=mission["title"], request=mission["request"],
                                                   deliverable=deliverable, sources_block=sources_block,
                                                   cite_rule=cite_rule, known=known),
-                         json_mode=False, max_tokens=1400).strip()
+                         json_mode=False, max_tokens=1400, role="write").strip()
         if not text:
             raise RuntimeError("The model returned an empty write-up")
         public_sources = [{"n": i + 1, "title": s["title"], "url": s["url"]} for i, s in enumerate(sources)]

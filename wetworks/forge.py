@@ -23,7 +23,7 @@ from .agent.runtime import parse_decision
 log = logging.getLogger("wetworks.forge")
 
 MIN_EXAMPLES = 150
-TEACHER_BRAINS = ("gemini", "claude")
+TEACHER_BRAINS = ("gemini", "claude", "openai", "grok")
 
 
 def _now() -> str:

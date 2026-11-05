@@ -116,6 +116,14 @@ class Intel(Cell):
         return new
 
     def _run_topic(self, topic: dict) -> list[Finding]:
+        router = getattr(self.ctx.llm, "router", None)
+        if topic.get("live") and router is not None and not self.ctx.settings.dry_run:
+            model = router.pick("live")
+            if model:  # fast-moving topic: Grok searches the web and X live
+                try:
+                    return self._run_topic_live(topic, model)
+                except Exception as e:
+                    self.log.warning("Live search failed for %r (%s); using the usual route", topic.get("name"), e)
         if self.ctx.ask is not None and self.ctx.settings.cells_agentic:
             found, searched = self._run_topic_agent(topic)
             if searched:
@@ -227,6 +235,17 @@ class Intel(Cell):
             picked.append({**item, "url": src["url"]})
         stored = self._store(name, picked, max_items)
         self.log.info("Intel %r: %d new from %d results (local, free)", name, len(stored), len(results))
+        return stored
+
+    def _run_topic_live(self, topic: dict, model: str) -> list[Finding]:
+        name = topic["name"]
+        max_items = int(topic.get("max_items", 3))
+        seen = self.ctx.findings.recent_titles(name) or ["(none)"]
+        prompt = PROMPT.format(name=name, brief=topic.get("brief", name).strip(), today=date.today().isoformat(),
+                               seen="\n".join(f"- {t}" for t in seen), max_items=max_items)
+        reply = self.ctx.llm._search_grok(f"intel:{name}", prompt, system=SYSTEM, model=model)
+        stored = self._store(name, parse_findings(reply.text), max_items)
+        self.log.info("Intel %r live: %d new (%s, %d searches, $%.3f)", name, len(stored), reply.model, reply.searches, reply.cost_usd)
         return stored
 
     def _run_topic_paid(self, topic: dict) -> list[Finding]:

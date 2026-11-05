@@ -125,9 +125,9 @@ def test_grok_search_parses_and_costs(tmp_path, monkeypatch):
     resp = SimpleNamespace(raise_for_status=lambda: None, json=lambda: payload)
     monkeypatch.setattr("wetworks.llm.httpx.post", lambda *a, **k: resp)
     r = llm._search_grok("intel:AI", "q", system="")
-    # 100k*$3/M + 10k*$15/M = $0.45, plus 2 searches * $0.01
+    # 100k*$3/M + 10k*$15/M = $0.45, plus 2 searches * $0.005 (xAI: $5 per 1,000)
     assert r.text == '[{"title":"G"}]' and r.searches == 2
-    assert r.cost_usd == pytest.approx(0.47)
+    assert r.cost_usd == pytest.approx(0.46)
 
 
 def test_format_findings_groups_by_topic():

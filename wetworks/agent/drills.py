@@ -52,6 +52,8 @@ SIMULATED = {
                                "focus_blocks": [{"app": "Code", "start": "09:00", "minutes": 70}], "doing_lately": ["Sample only"],
                                "habits": {"usual_start": "08:05", "usual_end": "18:40"}},
     "add_content_idea": lambda title="", angle="": "Added idea #901.",
+    "second_opinion": lambda work="", what="", author="": {"verdict": "fix", "issues": ["Sample review for practice"],
+                                                          "suggestion": "Sample suggestion", "reviewer": "sample"},
     "benchmark_model": lambda model="", dataset="agent-steps": f"Benchmark of {model} queued; results show in forge_status.",
 }
 

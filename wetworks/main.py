@@ -62,12 +62,15 @@ def build(settings):
     # Every agent decision is recorded for The Forge; brain says who made it (teachers: gemini, claude).
     traces = Traces(settings.data_dir / "traces.db")
     halt = Halt(settings.data_dir / "HALTED")
-    default_brain = lambda: "claude" if settings.agent_brain == "claude-api" else "local"
+    default_brain = lambda: (architect.llm.router.last_brain() if settings.agent_brain in ("claude-api", "cloud") else "local")
     forge = Forge(settings=settings, llm=architect.llm, traces=traces, events=architect.events,
                   data_dir=settings.data_dir / "forge", runner_url=settings.forge_url, ollama_url=settings.ollama_url)
     active = settings.data_dir / "forge" / "active_model.txt"
     if active.exists() and active.read_text().strip():
         architect.llm.ollama.model = active.read_text().strip()  # a model promoted from The Forge
+    from .models import Router
+
+    architect.llm.router = Router(settings, architect.ledger, architect.llm, settings.config_dir / "models.toml")
     ctx = CellContext(settings=settings, llm=architect.llm, findings=architect.findings, events=architect.events,
                       memory=memory, ask=recorded(make_ask(settings, architect.llm, "cells"), traces, "cells", default_brain),
                       halt=halt)
@@ -152,8 +155,8 @@ def build(settings):
     followups = Followups(settings.data_dir / "agents.db")
 
     arch_brain = settings.architect_brain_effective
-    on_claude = arch_brain == "claude-api"
-    arch_brain_name = lambda: "claude" if on_claude else "local"
+    on_claude = arch_brain in ("claude-api", "cloud")
+    arch_brain_name = (lambda: architect.llm.router.last_brain()) if on_claude else (lambda: "local")
     agent_ask = recorded(make_ask(settings, architect.llm, "architect", brain=arch_brain), traces, "architect", arch_brain_name)
     cycle_ask = recorded(make_ask(settings, architect.llm, "architect:cycle", brain=arch_brain, tier=settings.architect_cycle_tier),
                          traces, "architect", arch_brain_name)

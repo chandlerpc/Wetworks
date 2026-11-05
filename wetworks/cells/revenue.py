@@ -253,7 +253,24 @@ class Revenue(Cell):
             area=self.config.get("area", ""), research=research), max_tokens=500))
         if text:
             self.leads.update(lead["id"], draft=text)
+            self.leads.set_review(lead["id"], {})  # the old review was for the old draft
+            self._second_opinion(lead, text)
         return text
+
+    def _second_opinion(self, lead: dict, text: str) -> None:
+        """A model from another vendor checks the draft before Patrick sees it (if keys allow)."""
+        router = getattr(self.ctx.llm, "router", None)
+        if router is None or self.ctx.settings.dry_run or not router.pick("review", exclude_vendor="local"):
+            return
+        from ..models import review
+
+        try:
+            r = review(router, "a short first-contact email Patrick may send to a local business", text, "local",
+                       context=f"Business: {lead['business']}. What we noticed: {lead['signal']}. "
+                               f"Research: {(lead.get('research') or '')[:1200]}", agent=f"review:lead:{lead['id']}")
+            self.leads.set_review(lead["id"], r)
+        except Exception as e:
+            self.log.info("No second opinion for lead #%s: %s", lead["id"], e)
 
     # ---- research before outreach ----------------------------------------------------------------
     def research(self, lead: dict) -> dict | None:

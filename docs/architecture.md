@@ -413,6 +413,21 @@ have `search_past_chats` and `read_past_chat`.
   missions, findings with importance 5, top-fit leads (`FindingsStore.on_add`), and notes from C.L.a.i.R.
   Routine mission results wait for the next check-in.
 
+## Milestone 26: Many models (the model router)
+
+- `config/models.toml` lists every paid model (vendor, price), which models serve each job (roles: plan, reason,
+  code, review, write, long, bulk, live) and a monthly cap per vendor (Anthropic 55, xAI 15, OpenAI 15,
+  Google 15 = the $100 budget). `wetworks/models.py` `Router.ask(role)` uses the first model in the role with a
+  key and budget left, falls back down the list on errors or caps, then to the local model; every call is priced
+  in the ledger. Roles marked strict (review) fail instead of falling back to local.
+- Claude brains now go through the router: The Architect's chats use plan (Opus), check-ins reason (Sonnet).
+  Mission write-ups use write (Gemini Flash). Intel topics with `live = true` use Grok's live web + X search.
+- Cross-vendor review: outreach drafts and unflagged content drafts get a second opinion from another company's
+  model (`review` column, shown under the draft). The Architect and agents have a `second_opinion` tool.
+- `/api/models` and the console's per-company spend lines under This month.
+- C.L.a.i.R's Worker moved to Gemini 3.8 Flash. Grok Bot dropped (it has no inbound API; Wetworks does the same).
+- Private rooms (Finance, Day Job, Observer) and Content drafting never use the router.
+
 ## Next milestones
 
 1. Claude powering the agents and the Code cell (Friday).

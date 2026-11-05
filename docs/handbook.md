@@ -170,9 +170,28 @@ debugging), `workspaces/` and `sandbox-runs/` (code missions), `HALTED` (kill sw
 | The Architect | Chat: Claude Opus 5.5; check-ins: Claude Sonnet 5.5 (since Nov 4); or local | `WETWORKS_ARCHITECT_BRAIN` (falls back to `AGENT_BRAIN`), `WETWORKS_ARCHITECT_CYCLE_TIER` |
 | Cells, Splinter research | Local `gemma4:12b` | `WETWORKS_AGENT_BRAIN` |
 | Code cell | Local (weak at code) or Claude Sonnet | `WETWORKS_CODE_BRAIN` (`claude-code` on Max planned Friday) |
-| C.L.a.i.R | Gemini 2.5 Flash via her Worker's step mode; local backup | `WETWORKS_CLAIR_URL` / `_TOKEN` |
+| C.L.a.i.R | Gemini 3.8 Flash via her Worker's step mode (since Nov 4); local backup | `WETWORKS_CLAIR_URL` / `_TOKEN` |
 | Briefs, Intel provider | Local (Ollama + SearXNG) | `WETWORKS_PROVIDER` (`claude`, `grok` for paid tests) |
 | Finance, Day Job, Observer, Content drafting | Local only, always | hard-coded |
+
+**The model router (Nov 4).** Every paid, non-private model call goes through `wetworks/models.py`, configured
+in `config/models.toml`. Jobs (roles) and their models, in order of preference:
+
+| Role | Models | Used for |
+|---|---|---|
+| plan | Opus 5.5, GPT-5.5, Gemini 4 Argon | The Architect talking with Patrick |
+| reason | Sonnet 5.5, Gemini 3.8 Flash, GPT-5.4 mini | check-ins, agent reasoning on a paid brain |
+| code | Sonnet 5.5, GPT-5.5 | code missions on claude-api |
+| review | GPT-5.5, Sonnet 5.5, Gemini 3.1 Pro | second opinions; never the author's company, never local |
+| write | Gemini 3.8 Flash, Sonnet 5.5 | mission write-ups |
+| long | Gemini 3.1 Pro, Gemini 4 Argon | very long inputs |
+| bulk | Gemini 3.8 Flash, Haiku 5.5, GPT-5.4 mini | cheap summaries and sorting |
+| live | Grok 4.7 | Intel topics marked `live = true` (web + X search) |
+
+The router uses the first model with an API key and budget left, falls back down the list, then to the local
+model. Monthly budget $100 (Patrick, Nov 4: "meet in the middle at 100 and obviously prio anthropic"), split
+Anthropic $55, xAI $15, OpenAI $15, Google $15. A company without a key is simply skipped. Outreach drafts and
+content drafts get an automatic second opinion; agents have a `second_opinion` tool. Grok Bot isn't used.
 
 Claude tiers: route `claude-haiku-5-5`, work `claude-sonnet-5-5`, think `claude-opus-5-5`. Ledger prices
 per million tokens: Opus $4 / $20, Sonnet $2 / $10, Haiku $0.10 / $0.50. A deep Architect chat answer on
@@ -429,6 +448,8 @@ Other CLI commands: `brief morning|evening`, `code "<request>"`, `forge-dataset`
 9. Rooms unsealed: Finance (The Bookkeeper), Day Job (The Technician), Content (The Writer); The Observer
    added (watch sensitive screens, keep no details; PowerShell helper for the work PC).
 10. The Architect switched to Claude Opus 5.5 for a capability test (Nov 4); Patrick: "he works great so far".
+11. Check-ins cut to twice a day on Sonnet; the model router with four AI companies, cross-vendor review and a
+    $100 monthly budget (Nov 4).
 
 ---
 

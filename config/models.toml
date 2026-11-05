@@ -1,0 +1,41 @@
+# Which model does which job. Wetworks tries each model in a role's list in order and uses the first
+# one that has an API key and budget left; if none can, the job falls back to the free local model
+# (unless the role says local = false). Edit freely; it's re-read on every call.
+#
+# Private rooms (Finance, Day Job, The Observer) never use this file: they always run locally.
+
+# Monthly caps in dollars per vendor. Their total should match WETWORKS_MONTHLY_BUDGET_USD.
+# Anthropic comes first (The Architect and code).
+[budget]
+anthropic = 55
+xai = 15
+openai = 15
+google = 15
+
+# Every model Wetworks may call: vendor, and price in USD per million tokens [input, output].
+# Check prices now and then: docs.claude.com, docs.x.ai, platform.openai.com, ai.google.dev.
+[models]
+"claude-opus-5-5"        = { vendor = "anthropic", price = [4.00, 20.00] }
+"claude-sonnet-5-5"      = { vendor = "anthropic", price = [2.00, 10.00] }
+"claude-haiku-5-5"       = { vendor = "anthropic", price = [0.10, 0.50] }
+"grok-4.7"               = { vendor = "xai",       price = [2.00, 6.00] }
+"gpt-5.5"                = { vendor = "openai",    price = [5.00, 30.00] }
+"gpt-5.4-mini"           = { vendor = "openai",    price = [0.75, 4.50] }
+"gemini-4-argon"         = { vendor = "google",    price = [4.00, 20.00] }   # $2 / $10 until Dec 1
+"gemini-3.1-pro-preview" = { vendor = "google",    price = [2.00, 12.00] }
+"gemini-3.8-flash"       = { vendor = "google",    price = [0.75, 3.75] }
+
+# Jobs, each with its models in order of preference.
+[roles]
+plan   = ["claude-opus-5-5", "gpt-5.5", "gemini-4-argon"]            # The Architect talking with Patrick: strategy, plans
+reason = ["claude-sonnet-5-5", "gemini-3.8-flash", "gpt-5.4-mini"]   # check-ins and everyday agent reasoning
+code   = ["claude-sonnet-5-5", "gpt-5.5"]                            # code missions
+review = ["gpt-5.5", "claude-sonnet-5-5", "gemini-3.1-pro-preview"]  # second opinions; never the same vendor as the author
+write  = ["gemini-3.8-flash", "claude-sonnet-5-5"]                   # mission write-ups and other public-facing writing
+long   = ["gemini-3.1-pro-preview", "gemini-4-argon"]                # very long inputs (big documents, many sources)
+bulk   = ["gemini-3.8-flash", "claude-haiku-5-5", "gpt-5.4-mini"]    # cheap summaries and sorting
+live   = ["grok-4.7"]                                                # live web + X search (Intel's fast-moving topics)
+
+# Roles that must not fall back to the local model (fail instead).
+[strict]
+review = true    # a "second opinion" from the same local model isn't one

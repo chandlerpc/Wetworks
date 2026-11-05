@@ -56,7 +56,8 @@ class LeadStore:
 
     EXTRA = (("contacted_at", "TEXT NOT NULL DEFAULT ''"), ("followup_due", "TEXT NOT NULL DEFAULT ''"),
              ("followups", "INTEGER NOT NULL DEFAULT 0"), ("followup_draft", "TEXT NOT NULL DEFAULT ''"),
-             ("research", "TEXT NOT NULL DEFAULT ''"), ("research_mission", "INTEGER NOT NULL DEFAULT 0"))
+             ("research", "TEXT NOT NULL DEFAULT ''"), ("research_mission", "INTEGER NOT NULL DEFAULT 0"),
+             ("review", "TEXT NOT NULL DEFAULT ''"))
     KEYS = ("id", "created", "updated", "business", "url", "domain", "location", "signal", "offer", "why",
             "fit", "status", "draft", "notes") + tuple(c for c, _ in EXTRA)
 
@@ -171,6 +172,13 @@ class LeadStore:
                             (_in_days(days), _now(), lid))
             self.db.commit()
         return self.get(lid)
+
+    def set_review(self, lid: int, review: dict) -> None:
+        import json as _json
+
+        with self.lock:
+            self.db.execute("UPDATE leads SET review = ? WHERE id = ?", (_json.dumps(review), lid))
+            self.db.commit()
 
     def set_followup_draft(self, lid: int, text: str) -> None:
         with self.lock:
